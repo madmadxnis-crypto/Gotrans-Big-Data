@@ -6,7 +6,7 @@ import datetime
 import io # Wajib diimport untuk fitur unduh Excel
 
 # 1. Konfigurasi Halaman
-st.set_page_config(page_title="Gotrans TMS Dashboard", page_icon="🚚", layout="wide")
+st.set_page_config(page_title="Gotrans TMS Dashboard", page_icon="🚜", layout="wide")
 
 # 2. BUNDLE CSS FUTURISTIK & ELEGAN
 st.markdown("""
@@ -80,7 +80,7 @@ with col_logo:
         st.warning("⚠️ Logo 'logo_gobel.jpg' tidak ditemukan.")
 
 st.markdown("<h1 style='text-align: center; color: #ffffff; font-size: 2.5rem; font-weight: 800; margin-top: 10px; margin-bottom: 0px;'>Gotrans Operational Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #38bdf8; font-size: 1.1rem; letter-spacing: 2px; font-weight: 500;'>LOGISTIK & TRANSPORT MANAGEMENT SYSTEM (TMS)</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #38bdf8; font-size: 1.1rem; letter-spacing: 2px; font-weight: 500;'>TRANSPORT MANAGEMENT SYSTEM (TMS)</p>", unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
 
 # 4. KONEKSI DATABASE
@@ -138,7 +138,7 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
         
         with col_judul:
             if menu == "Ringkasan Eksekutif":
-                st.markdown(f"### 📈 Ringkasan Finansial Utama")
+                st.markdown(f"### 📈 Revenue")
             elif menu == "Data Raw Operasional":
                 st.markdown(f"### 🗄️ Database Mentah Terfilter")
 
@@ -222,7 +222,7 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
                 
                 delta_color = "normal" if margin_pct >= 0 else "inverse"
                 col3.metric("Total Margin", format_rp(margin_rp), f"{margin_pct:.1f}%", delta_color=delta_color)
-                col4.metric("Total Surat Jalan", f"{len(df_filtered):,}")
+                col4.metric("Total Sales Order", f"{len(df_filtered):,}")
                 
                 # --- TOMBOL EKSTRAK EXCEL (Sesuai Tampilan Layar Utama) ---
                 st.markdown("<br>", unsafe_allow_html=True)
