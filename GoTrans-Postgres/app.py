@@ -3,11 +3,12 @@ import pandas as pd
 from sqlalchemy import create_engine, inspect
 import plotly.express as px
 import datetime
+import io # Wajib diimport untuk fitur unduh Excel
 
 # 1. Konfigurasi Halaman
 st.set_page_config(page_title="Gotrans TMS Dashboard", page_icon="🚚", layout="wide")
 
-# 2. BUNDLE CSS FUTURISTIK
+# 2. BUNDLE CSS FUTURISTIK & ELEGAN
 st.markdown("""
     <style>
     .stApp {
@@ -52,6 +53,21 @@ st.markdown("""
     div[data-testid="stDateInput"] {
         margin-top: 5px !important;
     }
+    /* Style khusus tombol download Excel biar futuristik */
+    .stDownloadButton button {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+        color: white !important;
+        border: none !important;
+        padding: 10px 24px !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3) !important;
+        transition: all 0.3s ease !important;
+    }
+    .stDownloadButton button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px 0 rgba(16, 185, 129, 0.5) !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -71,7 +87,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 DATABASE_URL = st.secrets["SUPABASE_URL"].strip()
 engine = create_engine(DATABASE_URL)
 
-# 5. SIDEBAR & DETEKSI BULAN OTOMATIS
+# 5. SIDEBAR CONTROL
 st.sidebar.markdown("<h2 style='color: #38bdf8;'>NAVIGASI</h2>", unsafe_allow_html=True)
 menu = st.sidebar.radio("Pilih Menu:", ["Ringkasan Eksekutif", "Data Raw Operasional"])
 
@@ -96,32 +112,28 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
 
     try:
         df = pd.read_sql(query, engine)
+        # --- DETEKSI KOLOM OTOMATIS MENGHINDARI INDEX ERROR ---
+        date_col = next((c for c in df.columns if any(k in c.lower() for k in ['tanggal', 'tgl', 'date', 'surat_jalan'])), df.columns[0])
+        branch_col = df.columns[3]   # Kolom D (Index 3)
+        client_col = df.columns[12]  # Kolom M (Index 12)
+        group_col = df.columns[7]    # Kolom H (Index 7) - FIXED
         
-        # Deteksi kolom tanggal
-        date_col = None
-        for col in df.columns:
-            if any(k in col.lower() for k in ['tanggal', 'tgl', 'date', 'surat_jalan', 'sj']):
-                date_col = col
-                break
-                
-        if not date_col:
-            date_col = df.columns[0]
-        
+        # Deteksi otomatis untuk kolom Group
+        group_col = next((c for c in df.columns if 'group' in c.lower()), None)
+        if not group_col:
+            group_col = df.columns[13] if len(df.columns) > 13 else client_col
+
         df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
         df_valid = df.dropna(subset=[date_col])
         
-        # Set min_date & max_date AMAN (Menghindari NameError)
         if df_valid.empty:
-            min_date = datetime.date.today()
-            max_date = datetime.date.today()
+            min_date, max_date = datetime.date.today(), datetime.date.today()
         else:
-            min_date = df_valid[date_col].min().date()
-            max_date = df_valid[date_col].max().date()
+            min_date, max_date = df_valid[date_col].min().date(), df_valid[date_col].max().date()
             
-        start_date = min_date
-        end_date = max_date
+        start_date, end_date = min_date, max_date
 
-        # Pembagian Kolom untuk Judul dan Filter Tanggal
+        # --- BARIS JUDUL & FILTER TANGGAL SEJAJAR ---
         col_judul, col_filter = st.columns([2.5, 1.5]) 
         
         with col_judul:
@@ -132,14 +144,7 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
 
         with col_filter:
             if not df_valid.empty:
-                date_range = st.date_input(
-                    "Rentang Analisis:",
-                    value=(min_date, max_date),
-                    min_value=min_date,
-                    max_value=max_date,
-                    label_visibility="collapsed" 
-                )
-                
+                date_range = st.date_input("Rentang Analisis:", value=(min_date, max_date), min_value=min_date, max_value=max_date, label_visibility="collapsed")
                 if isinstance(date_range, tuple):
                     start_date = date_range[0]
                     end_date = date_range[1] if len(date_range) > 1 else date_range[0]
@@ -147,20 +152,43 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
                     start_date = date_range
                     end_date = date_range
 
-        # Terapkan filter tanggal ke dataframe
+        # Saringan Awal: Rentang Tanggal
         if not df_valid.empty:
             df_filtered = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_col].dt.date <= end_date)].copy()
-            df_filtered = df_filtered.sort_values(by=date_col)
         else:
-            df_filtered = df
+            df_filtered = df.copy()
+
+        # --- BARIS FILTER OPERASIONAL BARU (BRANCH, CLIENT, GROUP) ---
+        st.markdown("<p style='color: #38bdf8; font-weight: 600; margin-bottom: 5px;'>Filter Operasional Lapangan:</p>", unsafe_allow_html=True)
+        col_b, col_c, col_g = st.columns(3)
+        
+        with col_b:
+            opsi_branch = ["Semua"] + sorted(df_filtered[branch_col].dropna().unique().tolist())
+            pilih_branch = st.selectbox("Branch:", opsi_branch)
+        with col_c:
+            opsi_client = ["Semua"] + sorted(df_filtered[client_col].dropna().unique().tolist())
+            pilih_client = st.selectbox("Client:", opsi_client)
+        with col_g:
+            opsi_group = ["Semua"] + sorted(df_filtered[group_col].dropna().unique().tolist())
+            pilih_group = st.selectbox("Group:", opsi_group)
+
+        # Terapkan Saringan Operasional ke Dataframe
+        if pilih_branch != "Semua":
+            df_filtered = df_filtered[df_filtered[branch_col] == pilih_branch]
+        if pilih_client != "Semua":
+            df_filtered = df_filtered[df_filtered[client_col] == pilih_client]
+        if pilih_group != "Semua":
+            df_filtered = df_filtered[df_filtered[group_col] == pilih_group]
+
+        df_filtered = df_filtered.sort_values(by=date_col)
             
-        st.markdown(f"<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -10px;'>Periode Aktif: {start_date.strftime('%d %b %Y')} s/d {end_date.strftime('%d %b %Y')}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -5px;'>Periode Aktif: {start_date.strftime('%d %b %Y')} s/d {end_date.strftime('%d %b %Y')} | Filter: Branch ({pilih_branch}), Client ({pilih_client}), Group ({pilih_group})</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- MENU 1: RINGKASAN EKSEKUTIF ---
         if menu == "Ringkasan Eksekutif":
             try:
-                # Indeks Kolom Finansial
+                # Indeks Finansial Tetap Sama
                 rev_col = df_filtered.columns[97]          
                 cost_col = df_filtered.columns[98]         
                 rate_vendor_col = df_filtered.columns[102] 
@@ -187,6 +215,7 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
                     elif angka >= 1e6: return f"Rp {angka/1e6:.2f} Jt"
                     return f"Rp {angka:,.0f}"
 
+                # Tampilan Kotak Metrik Simetris
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Total Revenue", format_rp(total_rev))
                 col2.metric("Total Cost", format_rp(total_cost))
@@ -195,7 +224,28 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
                 col3.metric("Total Margin", format_rp(margin_rp), f"{margin_pct:.1f}%", delta_color=delta_color)
                 col4.metric("Total Surat Jalan", f"{len(df_filtered):,}")
                 
-                # Grafik Harian
+                # --- TOMBOL EKSTRAK EXCEL (Sesuai Tampilan Layar Utama) ---
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_btn, _ = st.columns([1, 3])
+                with col_btn:
+                    try:
+                        buffer = io.BytesIO()
+                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                            df_export = df_filtered.copy()
+                            # Ubah format datetime tanggal jadi string teks bersih khusus buat file Excel
+                            df_export[date_col] = df_export[date_col].dt.strftime('%Y-%m-%d')
+                            df_export.to_excel(writer, index=False, sheet_name='TMS_Filtered')
+                        
+                        st.download_button(
+                            label="📥 Ekstrak Data ke Excel",
+                            data=buffer.getvalue(),
+                            file_name=f"Gotrans_Ekstrak_{bulan}_{start_date}_to_{end_date}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    except Exception as ex:
+                        st.error(f"Gagal memproses ekstrak Excel: {ex}")
+
+                # Grafik Tren Harian
                 if not df_valid.empty and not df_filtered.empty:
                     st.markdown("<br><br>", unsafe_allow_html=True)
                     st.markdown("### 📊 Tren Performa Operasional Harian")
