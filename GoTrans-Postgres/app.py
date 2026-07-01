@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 import plotly.express as px
 import datetime
 
@@ -78,9 +78,34 @@ menu = st.sidebar.radio("Pilih Menu:", ["Ringkasan Eksekutif", "Data Raw Operasi
 
 st.sidebar.divider()
 
-st.sidebar.markdown("<h2 style='color: #38bdf8;'>FILTER BULAN</h2>", unsafe_allow_html=True)
-bulan = st.sidebar.selectbox("Bulan Aktif", ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10"])
+# 5. SIDEBAR CONTROL & AUTO-DETEKSI BULAN
+st.sidebar.markdown("<h2 style='color: #38bdf8;'>NAVIGASI</h2>", unsafe_allow_html=True)
+menu = st.sidebar.radio("Pilih Menu:", ["Ringkasan Eksekutif", "Data Raw Operasional"])
 
+st.sidebar.divider()
+
+# --- BLOK KODE BARU: Deteksi Tabel Otomatis dari Supabase ---
+try:
+    inspector = inspect(engine)
+    semua_tabel = inspector.get_table_names()
+    
+    # Saring hanya tabel yang namanya mirip format bulan (ada tanda strip)
+    # Lalu urutkan secara Descending (reverse=True) biar bulan terbaru ada di paling atas!
+    daftar_bulan = sorted([t for t in semua_tabel if '-' in t], reverse=True)
+except Exception:
+    daftar_bulan = ["Gagal membaca database"]
+
+# Jaga-jaga kalau databasenya kosong
+if not daftar_bulan:
+    daftar_bulan = ["Data Belum Tersedia"]
+
+st.sidebar.markdown("<h2 style='color: #38bdf8;'>FILTER BULAN</h2>", unsafe_allow_html=True)
+# Sekarang pilihan bulannya ngambil dari variabel daftar_bulan yang udah otomatis
+bulan = st.sidebar.selectbox("Bulan Aktif", daftar_bulan)
+# -----------------------------------------------------------
+
+# 6. ENGINE PROSES UTAMA (Sisa kode di bawahnya biarkan sama persis)
+query = f'SELECT * FROM "{bulan}"'
 # 6. ENGINE PROSES UTAMA
 query = f'SELECT * FROM "{bulan}"'
 
