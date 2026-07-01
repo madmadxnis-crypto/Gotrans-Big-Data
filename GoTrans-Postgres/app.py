@@ -40,7 +40,6 @@ st.sidebar.header("Filter Laporan")
 bulan = st.sidebar.selectbox("Bulan Aktif", ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10"])
 
 # 5. LOGIKA UTAMA & TAMPILAN MENU
-# 5. LOGIKA UTAMA & TAMPILAN MENU
 query = f'SELECT * FROM "{bulan}"'
 
 try:
@@ -49,21 +48,39 @@ try:
     if menu == "Ringkasan Eksekutif":
         st.subheader(f"Performa Finansial & Logistik - {bulan}")
         
-        # --- BLOK KALKULASI FINANSIAL (PENTING: Ganti nama kolom sesuai data aslimu!) ---
-        # Contoh: asumsikan lu punya kolom 'Total_Revenue' dan 'Total_Cost'
-        # Jika nama kolom beda, WAJIB diganti di bawah ini.
+        # --- BLOK KALKULASI FINANSIAL (Berdasarkan Posisi Kolom Excel) ---
         try:
-            total_rev = df['Total_Revenue'].sum()
-            total_cost = df['Total_Cost'].sum()
+            # Ambil nama kolom berdasarkan index pastinya
+            rev_col = df.columns[97]          # CT
+            cost_col = df.columns[98]         # CU
+            rate_vendor_col = df.columns[102] # CY
+            add_rate_vendor_col = df.columns[103] # CZ
+            
+            # 1. Bersihkan Data: Pastikan semua terbaca sebagai angka (kalau kosong jadi 0)
+            df[rev_col] = pd.to_numeric(df[rev_col], errors='coerce').fillna(0)
+            df[cost_col] = pd.to_numeric(df[cost_col], errors='coerce').fillna(0)
+            df[rate_vendor_col] = pd.to_numeric(df[rate_vendor_col], errors='coerce').fillna(0)
+            df[add_rate_vendor_col] = pd.to_numeric(df[add_rate_vendor_col], errors='coerce').fillna(0)
+            
+            # 2. Logika Cost (CU vs CY+CZ)
+            df['Final_Cost'] = df[cost_col]
+            # Deteksi baris yang cost-nya 0 (kosong)
+            mask_kosong = df['Final_Cost'] == 0
+            # Timpa yang kosong dengan Rate Vendor + Add Rate Vendor
+            df.loc[mask_kosong, 'Final_Cost'] = df.loc[mask_kosong, rate_vendor_col] + df.loc[mask_kosong, add_rate_vendor_col]
+            
+            # 3. Hitung Grand Total
+            total_rev = df[rev_col].sum()
+            total_cost = df['Final_Cost'].sum()
             margin_rp = total_rev - total_cost
             
-            # Hindari pembagian dengan nol
+            # Hitung persentase aman (anti error dibagi nol)
             if total_rev > 0:
                 margin_pct = (margin_rp / total_rev) * 100
             else:
                 margin_pct = 0
                 
-            # Format ke Rupiah (Miliar/Juta biar rapi)
+            # Fungsi supaya tampilan Rupiahnya rapi (dalam Miliar / Juta)
             def format_rp(angka):
                 if angka >= 1e9:
                     return f"Rp {angka/1e9:.2f} M"
@@ -76,14 +93,13 @@ try:
             col1.metric("Total Revenue", format_rp(total_rev))
             col2.metric("Total Cost", format_rp(total_cost))
             
-            # Bikin warna hijau kalau margin positif, merah kalau negatif
+            # Bikin indikator hijau kalau untung, merah kalau rugi
             delta_color = "normal" if margin_pct >= 0 else "inverse"
-            col3.metric("Margin", format_rp(margin_rp), f"{margin_pct:.1f}%", delta_color=delta_color)
-            col4.metric("Total Order", len(df))
+            col3.metric("Total Margin", format_rp(margin_rp), f"{margin_pct:.1f}%", delta_color=delta_color)
+            col4.metric("Total Surat Jalan", len(df))
             
-        except KeyError:
-            st.error("⚠️ Kolom finansial tidak ditemukan! Pastikan data lu punya kolom 'Total_Revenue' dan 'Total_Cost', lalu ubah namanya di kode.")
-            st.info("Buka menu 'Data Raw Operasional' untuk mengecek nama asli kolomnya.")
+        except IndexError:
+            st.error("⚠️ Kolomnya nggak nyampe CT/CU! Pastikan file Excel lu beneran punya format kolom yang panjang.")
 
     elif menu == "Data Raw Operasional":
         st.subheader(f"Database Mentah - {bulan}")
