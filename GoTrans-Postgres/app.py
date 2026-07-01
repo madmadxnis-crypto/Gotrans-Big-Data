@@ -49,7 +49,6 @@ st.markdown("""
     hr {
         border-color: rgba(56, 189, 248, 0.1) !important;
     }
-    /* Memastikan input tanggal vertikalnya sejajar dengan judul ringkasan */
     div[data-testid="stDateInput"] {
         margin-top: 5px !important;
     }
@@ -72,197 +71,179 @@ st.markdown("<br>", unsafe_allow_html=True)
 DATABASE_URL = st.secrets["SUPABASE_URL"].strip()
 engine = create_engine(DATABASE_URL)
 
-# 5. SIDEBAR CONTROL
+# 5. SIDEBAR & DETEKSI BULAN OTOMATIS
 st.sidebar.markdown("<h2 style='color: #38bdf8;'>NAVIGASI</h2>", unsafe_allow_html=True)
 menu = st.sidebar.radio("Pilih Menu:", ["Ringkasan Eksekutif", "Data Raw Operasional"])
 
 st.sidebar.divider()
 
-# 5. SIDEBAR CONTROL & AUTO-DETEKSI BULAN
-st.sidebar.markdown("<h2 style='color: #38bdf8;'>NAVIGASI</h2>", unsafe_allow_html=True)
-menu = st.sidebar.radio("Pilih Menu:", ["Ringkasan Eksekutif", "Data Raw Operasional"])
-
-st.sidebar.divider()
-
-# --- BLOK KODE BARU: Deteksi Tabel Otomatis dari Supabase ---
 try:
     inspector = inspect(engine)
     semua_tabel = inspector.get_table_names()
-    
-    # Saring hanya tabel yang namanya mirip format bulan (ada tanda strip)
-    # Lalu urutkan secara Descending (reverse=True) biar bulan terbaru ada di paling atas!
     daftar_bulan = sorted([t for t in semua_tabel if '-' in t], reverse=True)
 except Exception:
     daftar_bulan = ["Gagal membaca database"]
 
-# Jaga-jaga kalau databasenya kosong
 if not daftar_bulan:
     daftar_bulan = ["Data Belum Tersedia"]
 
 st.sidebar.markdown("<h2 style='color: #38bdf8;'>FILTER BULAN</h2>", unsafe_allow_html=True)
-# Sekarang pilihan bulannya ngambil dari variabel daftar_bulan yang udah otomatis
 bulan = st.sidebar.selectbox("Bulan Aktif", daftar_bulan)
-# -----------------------------------------------------------
 
-# 6. ENGINE PROSES UTAMA (Sisa kode di bawahnya biarkan sama persis)
-query = f'SELECT * FROM "{bulan}"'
 # 6. ENGINE PROSES UTAMA
-query = f'SELECT * FROM "{bulan}"'
+if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
+    query = f'SELECT * FROM "{bulan}"'
 
-try:
-    df = pd.read_sql(query, engine)
-    
-    # --- AUTOMATIC DATE COLUMN DETECTION ---
-    date_col = None
-    for col in df.columns:
-        if any(k in col.lower() for k in ['tanggal', 'tgl', 'date', 'surat_jalan', 'sj']):
-            date_col = col
-            break
-            
-    if not date_col:
-        date_col = df.columns[0]
-    
-    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-    df_valid = df.dropna(subset=[date_col])
-    
-    # Inisialisasi default tanggal awal dan akhir
-    if df_valid.empty:
-        min_date = datetime.date.today()
-        max_date = datetime.date.today()
-        start_date = min_date
-        end_date = max_date
-    else:
-        min_date = df_valid[date_col].min().date()
-        max_date = df_valid[date_col].max().date()
-        start_date = min_date
-        end_date = max_date
-
-    # --- BARIS JUDUL + FILTER TANGGAL SEJAJAR ---
-    col_judul_section, col_filter_section = st.columns([2.5, 1.5]) # Pembagian ruang agar filter mepet kanan
-    
-    with col_judul_section:
-        if menu == "Ringkasan Eksekutif":
-            if df_valid.empty:
-                st.markdown(f"### 📈 Ringkasan Finansial Utama — `{bulan}`")
-            else:
-                # Judul dinamis mengikuti isi kalender
-                st.markdown(f"### 📈 Ringkasan Finansial Utama")
-        elif menu == "Data Raw Operasional":
-            st.markdown(f"### 🗄️ Database Mentah Terfilter — `{bulan}`")
-
-    with col_filter_section:
-        if not df_valid.empty:
-            # Dropdown kalender ditaruh sejajar di paling kanan halaman utama
-            date_range = st.date_input(
-                "Rentang Analisis Tanggal:",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date,
-                label_visibility="collapsed" # Menyembunyikan teks label atas agar lebih bersih & sejajar judul
-            )
-            
-            if isinstance(date_range, tuple):
-                start_date = date_range[0]
-                end_date = date_range[1] if len(date_range) > 1 else date_range[0]
-            else:
-                start_date = date_range
-                end_date = date_range
-
-    # Filter data frame berdasarkan rentang kalender di atas
-    if not df_valid.empty:
-        df_filtered = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_col].dt.date <= end_date)].copy()
-        df_filtered = df_filtered.sort_values(by=date_col)
-    else:
-        df_filtered = df
+    try:
+        df = pd.read_sql(query, engine)
         
-    st.markdown(f"<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -10px;'>Periode Aktif: {start_date.strftime('%d %b %Y')} s/d {end_date.strftime('%d %b %Y')}</p>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- JALUR MENU 1: RINGKASAN EKSEKUTIF ---
-    if menu == "Ringkasan Eksekutif":
-        try:
-            rev_col = df_filtered.columns[97]          
-            cost_col = df_filtered.columns[98]         
-            rate_vendor_col = df_filtered.columns[102] 
-            add_rate_vendor_col = df_filtered.columns[103] 
-            
-            df_filtered[rev_col] = pd.to_numeric(df_filtered[rev_col], errors='coerce').fillna(0)
-            df_filtered[cost_col] = pd.to_numeric(df_filtered[cost_col], errors='coerce').fillna(0)
-            df_filtered[rate_vendor_col] = pd.to_numeric(df_filtered[rate_vendor_col], errors='coerce').fillna(0)
-            df_filtered[add_rate_vendor_col] = pd.to_numeric(df_filtered[add_rate_vendor_col], errors='coerce').fillna(0)
-            
-            df_filtered['Final_Cost'] = df_filtered[cost_col]
-            mask_kosong = df_filtered['Final_Cost'] == 0
-            df_filtered.loc[mask_kosong, 'Final_Cost'] = df_filtered.loc[mask_kosong, rate_vendor_col] + df_filtered.loc[mask_kosong, add_rate_vendor_col]
-            
-            df_filtered['Calculated_Margin'] = df_filtered[rev_col] - df_filtered['Final_Cost']
-            
-            total_rev = df_filtered[rev_col].sum()
-            total_cost = df_filtered['Final_Cost'].sum()
-            margin_rp = total_rev - total_cost
-            margin_pct = (margin_rp / total_rev * 100) if total_rev > 0 else 0
+        # Deteksi kolom tanggal
+        date_col = None
+        for col in df.columns:
+            if any(k in col.lower() for k in ['tanggal', 'tgl', 'date', 'surat_jalan', 'sj']):
+                date_col = col
+                break
                 
-            def format_rp(angka):
-                if angka >= 1e9: return f"Rp {angka/1e9:.2f} M"
-                elif angka >= 1e6: return f"Rp {angka/1e6:.2f} Jt"
-                return f"Rp {angka:,.0f}"
+        if not date_col:
+            date_col = df.columns[0]
+        
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        df_valid = df.dropna(subset=[date_col])
+        
+        # Set min_date & max_date AMAN (Menghindari NameError)
+        if df_valid.empty:
+            min_date = datetime.date.today()
+            max_date = datetime.date.today()
+        else:
+            min_date = df_valid[date_col].min().date()
+            max_date = df_valid[date_col].max().date()
+            
+        start_date = min_date
+        end_date = max_date
 
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Total Revenue", format_rp(total_rev))
-            col2.metric("Total Cost", format_rp(total_cost))
-            
-            delta_color = "normal" if margin_pct >= 0 else "inverse"
-            col3.metric("Total Margin", format_rp(margin_rp), f"{margin_pct:.1f}%", delta_color=delta_color)
-            col4.metric("Total Surat Jalan", f"{len(df_filtered):,}")
-            
+        # Pembagian Kolom untuk Judul dan Filter Tanggal
+        col_judul, col_filter = st.columns([2.5, 1.5]) 
+        
+        with col_judul:
+            if menu == "Ringkasan Eksekutif":
+                st.markdown(f"### 📈 Ringkasan Finansial Utama")
+            elif menu == "Data Raw Operasional":
+                st.markdown(f"### 🗄️ Database Mentah Terfilter")
+
+        with col_filter:
             if not df_valid.empty:
-                st.markdown("<br><br>", unsafe_allow_html=True)
-                st.markdown("### 📊 Tren Performa Operasional Harian")
+                date_range = st.date_input(
+                    "Rentang Analisis:",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                    label_visibility="collapsed" 
+                )
                 
-                df_daily = df_filtered.groupby(df_filtered[date_col].dt.date).agg({
-                    rev_col: 'sum',
-                    'Final_Cost': 'sum',
-                    'Calculated_Margin': 'sum'
-                }).reset_index()
-                
-                df_daily.columns = ['Tanggal', 'Revenue', 'Cost', 'Margin']
-                
-                chart_col1, chart_col2 = st.columns(2)
-                
-                with chart_col1:
-                    fig_rev_cost = px.line(
-                        df_daily, x='Tanggal', y=['Revenue', 'Cost'],
-                        labels={'value': 'Jumlah Angka (Rp)', 'variable': 'Komponen'},
-                        title="Tren Harian: Total Revenue vs Total Cost",
-                        template="plotly_dark",
-                        color_discrete_sequence=["#38bdf8", "#f43f5e"] 
-                    )
-                    fig_rev_cost.update_layout(
-                        paper_bgcolor='rgba(17, 24, 39, 0.5)', plot_bgcolor='rgba(0,0,0,0)',
-                        xaxis=dict(showgrid=False), yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
-                    )
-                    st.plotly_chart(fig_rev_cost, use_container_width=True)
-                    
-                with chart_col2:
-                    fig_margin = px.line(
-                        df_daily, x='Tanggal', y='Margin',
-                        labels={'Margin': 'Total Margin (Rp)'},
-                        title="Tren Harian: Pergerakan Net Margin",
-                        template="plotly_dark",
-                        color_discrete_sequence=["#10b981"] 
-                    )
-                    fig_margin.update_layout(
-                        paper_bgcolor='rgba(17, 24, 39, 0.5)', plot_bgcolor='rgba(0,0,0,0)',
-                        xaxis=dict(showgrid=False), yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
-                    )
-                    st.plotly_chart(fig_margin, use_container_width=True)
+                if isinstance(date_range, tuple):
+                    start_date = date_range[0]
+                    end_date = date_range[1] if len(date_range) > 1 else date_range[0]
+                else:
+                    start_date = date_range
+                    end_date = date_range
+
+        # Terapkan filter tanggal ke dataframe
+        if not df_valid.empty:
+            df_filtered = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_col].dt.date <= end_date)].copy()
+            df_filtered = df_filtered.sort_values(by=date_col)
+        else:
+            df_filtered = df
             
-        except IndexError:
-            st.error("⚠️ Struktur data kolom Excel berubah atau posisi indeks tidak sesuai.")
+        st.markdown(f"<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -10px;'>Periode Aktif: {start_date.strftime('%d %b %Y')} s/d {end_date.strftime('%d %b %Y')}</p>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-# --- JALUR MENU 2: DATA RAW OPERASIONAL ---
-    elif menu == "Data Raw Operasional":
-        st.dataframe(df_filtered)
+        # --- MENU 1: RINGKASAN EKSEKUTIF ---
+        if menu == "Ringkasan Eksekutif":
+            try:
+                # Indeks Kolom Finansial
+                rev_col = df_filtered.columns[97]          
+                cost_col = df_filtered.columns[98]         
+                rate_vendor_col = df_filtered.columns[102] 
+                add_rate_vendor_col = df_filtered.columns[103] 
+                
+                df_filtered[rev_col] = pd.to_numeric(df_filtered[rev_col], errors='coerce').fillna(0)
+                df_filtered[cost_col] = pd.to_numeric(df_filtered[cost_col], errors='coerce').fillna(0)
+                df_filtered[rate_vendor_col] = pd.to_numeric(df_filtered[rate_vendor_col], errors='coerce').fillna(0)
+                df_filtered[add_rate_vendor_col] = pd.to_numeric(df_filtered[add_rate_vendor_col], errors='coerce').fillna(0)
+                
+                df_filtered['Final_Cost'] = df_filtered[cost_col]
+                mask_kosong = df_filtered['Final_Cost'] == 0
+                df_filtered.loc[mask_kosong, 'Final_Cost'] = df_filtered.loc[mask_kosong, rate_vendor_col] + df_filtered.loc[mask_kosong, add_rate_vendor_col]
+                
+                df_filtered['Calculated_Margin'] = df_filtered[rev_col] - df_filtered['Final_Cost']
+                
+                total_rev = df_filtered[rev_col].sum()
+                total_cost = df_filtered['Final_Cost'].sum()
+                margin_rp = total_rev - total_cost
+                margin_pct = (margin_rp / total_rev * 100) if total_rev > 0 else 0
+                    
+                def format_rp(angka):
+                    if angka >= 1e9: return f"Rp {angka/1e9:.2f} M"
+                    elif angka >= 1e6: return f"Rp {angka/1e6:.2f} Jt"
+                    return f"Rp {angka:,.0f}"
 
-except Exception as e:
-    st.error(f"Gagal memuat data atau tabel `{bulan}` belum ada di Supabase: {e}")
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Total Revenue", format_rp(total_rev))
+                col2.metric("Total Cost", format_rp(total_cost))
+                
+                delta_color = "normal" if margin_pct >= 0 else "inverse"
+                col3.metric("Total Margin", format_rp(margin_rp), f"{margin_pct:.1f}%", delta_color=delta_color)
+                col4.metric("Total Surat Jalan", f"{len(df_filtered):,}")
+                
+                # Grafik Harian
+                if not df_valid.empty and not df_filtered.empty:
+                    st.markdown("<br><br>", unsafe_allow_html=True)
+                    st.markdown("### 📊 Tren Performa Operasional Harian")
+                    
+                    df_daily = df_filtered.groupby(df_filtered[date_col].dt.date).agg({
+                        rev_col: 'sum',
+                        'Final_Cost': 'sum',
+                        'Calculated_Margin': 'sum'
+                    }).reset_index()
+                    
+                    df_daily.columns = ['Tanggal', 'Revenue', 'Cost', 'Margin']
+                    
+                    chart_col1, chart_col2 = st.columns(2)
+                    
+                    with chart_col1:
+                        fig_rev_cost = px.line(
+                            df_daily, x='Tanggal', y=['Revenue', 'Cost'],
+                            labels={'value': 'Jumlah Angka (Rp)', 'variable': 'Komponen'},
+                            title="Tren Harian: Total Revenue vs Total Cost",
+                            template="plotly_dark",
+                            color_discrete_sequence=["#38bdf8", "#f43f5e"] 
+                        )
+                        fig_rev_cost.update_layout(
+                            paper_bgcolor='rgba(17, 24, 39, 0.5)', plot_bgcolor='rgba(0,0,0,0)',
+                            xaxis=dict(showgrid=False), yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
+                        )
+                        st.plotly_chart(fig_rev_cost, use_container_width=True)
+                        
+                    with chart_col2:
+                        fig_margin = px.line(
+                            df_daily, x='Tanggal', y='Margin',
+                            labels={'Margin': 'Total Margin (Rp)'},
+                            title="Tren Harian: Pergerakan Net Margin",
+                            template="plotly_dark",
+                            color_discrete_sequence=["#10b981"] 
+                        )
+                        fig_margin.update_layout(
+                            paper_bgcolor='rgba(17, 24, 39, 0.5)', plot_bgcolor='rgba(0,0,0,0)',
+                            xaxis=dict(showgrid=False), yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
+                        )
+                        st.plotly_chart(fig_margin, use_container_width=True)
+                
+            except IndexError:
+                st.error("⚠️ Struktur data kolom Excel berubah atau posisi indeks tidak sesuai.")
+
+        # --- MENU 2: DATA RAW OPERASIONAL ---
+        elif menu == "Data Raw Operasional":
+            st.dataframe(df_filtered)
+
+    except Exception as e:
+        st.error(f"Gagal memuat data dari tabel `{bulan}`: {e}")
