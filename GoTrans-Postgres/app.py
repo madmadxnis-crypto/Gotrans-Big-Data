@@ -142,9 +142,16 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
             elif menu == "Data Raw Operasional":
                 st.markdown(f"### 🗄️ Database Mentah Terfilter")
 
-        with col_filter:
-            if not df_valid.empty:
-                date_range = st.date_input("Rentang Analisis:", value=(min_date, max_date), min_value=min_date, max_value=max_date, label_visibility="collapsed")
+with col_filter:
+    if not df_valid.empty:
+        date_range = st.date_input(
+            "Rentang Analisis:",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+            format="DD/MM/YYYY",  # <--- INI TAMBAHANNYA BIAR FORMAT TANGGALNYA INDONESIA BANGET
+            label_visibility="collapsed" 
+        )
                 if isinstance(date_range, tuple):
                     start_date = date_range[0]
                     end_date = date_range[1] if len(date_range) > 1 else date_range[0]
