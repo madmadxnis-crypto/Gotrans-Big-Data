@@ -145,13 +145,23 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
 with col_filter:
     if not df_valid.empty:
         date_range = st.date_input(
-            "Rentang Analisis:",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date,
-            format="DD/MM/YYYY",  # <--- INI TAMBAHANNYA BIAR FORMAT TANGGALNYA INDONESIA BANGET
-            label_visibility="collapsed" 
-        )
+                    "Rentang Analisis:",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                    format="DD/MM/YYYY",
+                    label_visibility="collapsed" 
+                )
+                
+                # LOGIKA BARU YANG ANTI ERROR:
+                if isinstance(date_range, (list, tuple)):
+                    if len(date_range) == 2:
+                        start_date, end_date = date_range[0], date_range[1]
+                    else:
+                        start_date = end_date = date_range[0]
+                else:
+                    # Kalau cuma satu tanggal yang kepilih
+                    start_date = end_date = date_range
                 if isinstance(date_range, tuple):
                     start_date = date_range[0]
                     end_date = date_range[1] if len(date_range) > 1 else date_range[0]
