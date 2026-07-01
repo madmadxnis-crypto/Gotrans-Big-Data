@@ -4,7 +4,7 @@ import glob
 import os
 
 # Mengambil URL database dari GitHub Secrets secara otomatis
-DATABASE_URL = os.getenv("SUPABASE_URL")
+DATABASE_URL = os.getenv("SUPABASE_URL").strip()
 if not DATABASE_URL:
     raise ValueError("Waduh, SUPABASE_URL nggak ketemu di GitHub Secrets!")
 
