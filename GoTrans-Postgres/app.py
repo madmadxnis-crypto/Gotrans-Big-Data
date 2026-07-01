@@ -293,7 +293,6 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
 
         # --- MENU 2: DATA RAW OPERASIONAL ---
         def tampilkan_raw_data():
-        elif menu == "Data Raw Operasional":
             st.dataframe(df_filtered)
 
     except Exception as e:
