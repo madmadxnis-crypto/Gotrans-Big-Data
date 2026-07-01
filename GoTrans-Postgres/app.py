@@ -202,4 +202,29 @@ try:
                 st.plotly_chart(fig_rev_cost, use_container_width=True)
                 
             with chart_col2:
-                # Grafik 2: Margin
+                # Grafik 2: Margin Mandiri
+                fig_margin = px.line(
+                    df_daily, x='Tanggal', y='Margin',
+                    labels={'Margin': 'Total Margin (Rp)'},
+                    title="Tren Harian: Pergerakan Net Margin",
+                    template="plotly_dark",
+                    color_discrete_sequence=["#10b981"] # Warna Emerald Green Neon
+                )
+                fig_margin.update_layout(
+                    paper_bgcolor='rgba(17, 24, 39, 0.5)', plot_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(showgrid=False), yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
+                )
+                st.plotly_chart(fig_margin, use_container_width=True)
+            
+        except IndexError:
+            st.error("⚠️ Struktur data kolom Excel berubah atau posisi indeks tidak sesuai.")
+
+    # --- JALUR MENU 2: DATA RAW OPERASIONAL ---
+    elif menu == "Data Raw Operasional":
+        st.markdown(f"### 🗄️ Database Mentah Terfilter — `{bulan}`")
+        st.markdown(f"Menampilkan data dari tanggal {start_date} sampai {end_date}")
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.dataframe(df_filtered)
+
+except Exception as e:
+    st.error(f"Gagal memuat data atau tabel `{bulan}` belum ada di Supabase: {e}")
