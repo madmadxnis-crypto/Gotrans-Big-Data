@@ -135,8 +135,8 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
 
         # --- BARIS JUDUL & FILTER TANGGAL SEJAJAR ---
         col_judul, col_filter = st.columns([2.5, 1.5]) 
+        
         def tampilkan_ringkasan():
-        with col_judul:
             if menu == "Ringkasan Eksekutif":
                 st.markdown(f"### 📈 Revenue")
             elif menu == "Data Raw Operasional":
