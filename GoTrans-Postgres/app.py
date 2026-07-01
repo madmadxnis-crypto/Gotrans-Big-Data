@@ -96,7 +96,7 @@ try:
             # Bikin indikator hijau kalau untung, merah kalau rugi
             delta_color = "normal" if margin_pct >= 0 else "inverse"
             col3.metric("Total Margin", format_rp(margin_rp), f"{margin_pct:.1f}%", delta_color=delta_color)
-            col4.metric("Total Surat Jalan", len(df))
+            col4.metric("Total Sales Order", len(df))
             
         except IndexError:
             st.error("⚠️ Kolomnya nggak nyampe CT/CU! Pastikan file Excel lu beneran punya format kolom yang panjang.")
