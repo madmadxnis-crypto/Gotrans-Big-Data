@@ -8,15 +8,21 @@ st.set_page_config(page_title="Gotrans TMS Dashboard", page_icon="🚚", layout=
 # 2. HEADER: Logo dan Judul berdampingan
 col_logo, col_judul = st.columns([1, 4]) # Rasio lebar kolom 1:4
 
+# 2. HEADER: Logo dan Judul berdampingan
+col_logo, col_judul = st.columns([1, 4]) # Rasio lebar kolom 1:4
+
 with col_logo:
-    # Menampilkan logo (pastikan nama file persis sama dengan yang di-upload)
-    st.image("logo_gobel.jpg", use_container_width=True)
+    try:
+        # Mencoba menampilkan logo
+        st.image("logo_gobel.jpg", use_container_width=True)
+    except Exception:
+        # Kalau gambar nggak ketemu, lewati saja biar aplikasi nggak mati
+        st.warning("Logo hilang")
 
 with col_judul:
     # Pakai HTML sedikit biar margin atasnya pas sama tinggi logo
     st.markdown("<h1 style='margin-top: -15px;'>Gotrans Operational Dashboard</h1>", unsafe_allow_html=True)
     st.markdown("#### Logistik & Transport Management System (TMS)")
-
 st.divider() # Garis pembatas
 
 # 3. SETUP KONEKSI
