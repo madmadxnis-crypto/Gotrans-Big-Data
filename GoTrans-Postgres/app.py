@@ -235,9 +235,9 @@ try:
         except IndexError:
             st.error("⚠️ Struktur data kolom Excel berubah atau posisi indeks tidak sesuai.")
 
-    # --- JALUR MENU 2: DATA RAW OPERASIONAL ---
+# --- JALUR MENU 2: DATA RAW OPERASIONAL ---
     elif menu == "Data Raw Operasional":
         st.dataframe(df_filtered)
 
 except Exception as e:
-    st.error(f"Gagal memuat data atau tabel `{bulan}"` belum ada di Supabase: {e}")
+    st.error(f"Gagal memuat data atau tabel `{bulan}` belum ada di Supabase: {e}")
