@@ -135,7 +135,7 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
 
         # --- BARIS JUDUL & FILTER TANGGAL SEJAJAR ---
         col_judul, col_filter = st.columns([2.5, 1.5]) 
-        
+        def tampilkan_ringkasan():
         with col_judul:
             if menu == "Ringkasan Eksekutif":
                 st.markdown(f"### 📈 Revenue")
@@ -292,6 +292,7 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
                 st.error("⚠️ Struktur data kolom Excel berubah atau posisi indeks tidak sesuai.")
 
         # --- MENU 2: DATA RAW OPERASIONAL ---
+        def tampilkan_raw_data():
         elif menu == "Data Raw Operasional":
             st.dataframe(df_filtered)
 
