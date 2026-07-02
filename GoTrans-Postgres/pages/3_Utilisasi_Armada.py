@@ -24,8 +24,16 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h2 style='text-align: left; color: #ffffff; font-weight: 800;'>📊 Report Utilisasi Armada Pintar</h2>", unsafe_allow_html=True)
-st.markdown("<p style='color: #94a3b8;'>Sistem otomatis mendeteksi Hari Kerja (SLA) & menyatukan data multi-bulan.</p>", unsafe_allow_html=True)
+# --- NAVIGASI BACK TO HOME SEJAJAR JUDUL ---
+col_title, col_home = st.columns([4, 1])
+with col_title:
+    st.markdown("<h2 style='margin-top: 0px; color: #ffffff; font-weight: 800;'>📊 Report Utilisasi Armada Pintar</h2>", unsafe_allow_html=True)
+with col_home:
+    # Tombol HTML/Streamlit untuk redirect kembali ke Halaman Utama (app.py)
+    if st.button("🏠 Kembali ke Home", use_container_width=True):
+        st.switch_page("app.py")
+
+st.markdown("<p style='color: #94a3b8; margin-top: -10px;'>Sistem otomatis mendeteksi Hari Kerja (SLA) & menyatukan data multi-bulan.</p>", unsafe_allow_html=True)
 st.markdown("<hr style='margin-top: 0px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 # --- KONEKSI & PARSING NAMA TABEL ---
@@ -102,9 +110,12 @@ rev_col = df.columns[97] if len(df.columns) > 97 else "Revenue"
 df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
 df_valid = df.dropna(subset=[date_col])
 
-min_db_date = df_valid[date_col].min().date() if not df_valid.empty else datetime.date.today()
-max_db_date = df_valid[date_col].max().date() if not df_valid.empty else datetime.date.today()
+# LOGIKA DEFAULT TANGGAL TERBARU DINAMIS (Tanggal 1 s/d Hari Ini)
 today = datetime.date.today()
+start_of_month = today.replace(day=1) # Otomatis set ke tanggal 1 di bulan berjalan
+
+min_db_date = df_valid[date_col].min().date() if not df_valid.empty else start_of_month
+max_db_date = df_valid[date_col].max().date() if not df_valid.empty else today
 
 if preset == "All Time":
     def_start, def_end = min_db_date, max_db_date
@@ -114,10 +125,12 @@ elif preset == "Last 6 Months":
     def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(months=6)).date(), today
 elif preset == "Last 1 Year":
     def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(years=1)).date(), today
-else:
-    def_start, def_end = min_db_date, max_db_date
+else: # Bulan Spesifik (Default langsung 1 s/d Hari Ini)
+    def_start, def_end = start_of_month, today
 
-if def_start > def_end: def_start = def_end
+# Proteksi crash jika rentang database lebih kecil
+if def_start > def_end: 
+    def_start = def_end
 
 with col_start: start_date = st.date_input("Mulai Tanggal:", value=def_start, format="DD/MM/YYYY")
 with col_end: end_date = st.date_input("Sampai Tanggal:", value=def_end, format="DD/MM/YYYY")
@@ -132,12 +145,9 @@ df_temp = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_c
 # --- BARIS 2: FILTER SALING MENGUNCI DENGAN TRANSPORTER (CASCADING) ---
 col_t, col_b, col_c, col_g = st.columns(4)
 
-# 1. Transporter Filter (Mengunci filter setelahnya)
 with col_t:
     opsi_t = ["Semua"] + sorted(df_temp[transporter_col].astype(str).dropna().unique().tolist())
-    # Cek apakah GoTrans ada di pilihan, kalau ada set jadi default, kalau tidak default "Semua"
     default_idx_t = opsi_t.index("GoTrans Logistics International") if "GoTrans Logistics International" in opsi_t else 0
-    
     pilih_transporter = st.selectbox("Transporter:", opsi_t, index=default_idx_t)
     if pilih_transporter != "Semua": 
         df_temp = df_temp[df_temp[transporter_col].astype(str) == pilih_transporter]
@@ -160,7 +170,6 @@ with col_g:
 # Finalisasi Dataframe Terfilter
 df_f = df_temp.copy()
 
-# Filter Khusus Exclude Status Cancel (Otomatis)
 if status_col in df_f.columns:
     df_f = df_f[~df_f[status_col].isin(["Cancel Order Approved", "Not Accepted", "Cancel Order Requested"])]
 
@@ -183,10 +192,10 @@ for d in pd.date_range(start_date, end_date):
 # --- FUNGSI FORMAT MATA UANG PINTAR ---
 def format_rp(angka):
     if angka >= 1e9: 
-        return f"Rp {angka/1e9:,.2f} M"  # Untuk Miliar
+        return f"Rp {angka/1e9:,.2f} M"
     elif angka >= 1e6: 
-        return f"Rp {angka/1e6:,.1f} Jt" # Untuk Juta
-    return f"Rp {angka:,.0f}"            # Untuk Ratusan Ribu ke bawah
+        return f"Rp {angka/1e6:,.1f} Jt"
+    return f"Rp {angka:,.0f}"
 
 # --- PIVOT TABLE & AGREGASI ---
 st.markdown(f"### 🚛 Hasil Utilisasi (SLA: {hari_kerja} Hari Kerja)")
