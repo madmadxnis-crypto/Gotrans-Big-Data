@@ -40,15 +40,15 @@ if not tabel_valid:
     st.warning("Database belum tersedia atau format nama tabel tidak dikenali.")
     st.stop()
 
-# Deteksi Dinamis Format Bulan & Tahun (Anti-Kebalik)
+# Deteksi Dinamis Format Bulan & Tahun
 bulan_set, tahun_set = set(), set()
 for t in tabel_valid:
     parts = t.split('-')
     if len(parts) >= 2:
-        if len(parts[0]) == 4:  # Jika YYYY-MM
+        if len(parts[0]) == 4:
             tahun_set.add(parts[0])
             bulan_set.add(parts[1])
-        else:                   # Jika MM-YYYY
+        else:
             bulan_set.add(parts[0])
             tahun_set.add(parts[1])
 
@@ -66,7 +66,6 @@ with col_thn:
 # --- PENGAMBILAN DATA BERDASARKAN MODE ---
 df_list = []
 if preset == "Bulan Spesifik":
-    # Susun ulang nama tabel sesuai yang ada di database
     target_table = f"{pilih_tahun}-{pilih_bulan}" if f"{pilih_tahun}-{pilih_bulan}" in tabel_valid else f"{pilih_bulan}-{pilih_tahun}"
     if target_table in tabel_valid:
         df_list.append(pd.read_sql(f'SELECT * FROM "{target_table}"', engine))
@@ -107,7 +106,6 @@ min_db_date = df_valid[date_col].min().date() if not df_valid.empty else datetim
 max_db_date = df_valid[date_col].max().date() if not df_valid.empty else datetime.date.today()
 today = datetime.date.today()
 
-# Logika Otomatis Preset Waktu
 if preset == "All Time":
     def_start, def_end = min_db_date, max_db_date
 elif preset == "Last 3 Months":
@@ -116,7 +114,7 @@ elif preset == "Last 6 Months":
     def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(months=6)).date(), today
 elif preset == "Last 1 Year":
     def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(years=1)).date(), today
-else: # Bulan Spesifik
+else:
     def_start, def_end = min_db_date, max_db_date
 
 if def_start > def_end: def_start = def_end
@@ -131,8 +129,18 @@ if start_date > end_date:
 # --- FILTER DATA AWAL (BERDASARKAN TANGGAL) ---
 df_temp = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_col].dt.date <= end_date)].copy()
 
-# --- BARIS 2: FILTER SALING MENGUNCI (CASCADING) ---
-col_b, col_c, col_g = st.columns(3)
+# --- BARIS 2: FILTER SALING MENGUNCI DENGAN TRANSPORTER (CASCADING) ---
+col_t, col_b, col_c, col_g = st.columns(4)
+
+# 1. Transporter Filter (Mengunci filter setelahnya)
+with col_t:
+    opsi_t = ["Semua"] + sorted(df_temp[transporter_col].astype(str).dropna().unique().tolist())
+    # Cek apakah GoTrans ada di pilihan, kalau ada set jadi default, kalau tidak default "Semua"
+    default_idx_t = opsi_t.index("GoTrans Logistics International") if "GoTrans Logistics International" in opsi_t else 0
+    
+    pilih_transporter = st.selectbox("Transporter:", opsi_t, index=default_idx_t)
+    if pilih_transporter != "Semua": 
+        df_temp = df_temp[df_temp[transporter_col].astype(str) == pilih_transporter]
 
 with col_b:
     opsi_b = ["Semua"] + sorted(df_temp[branch_col].astype(str).dropna().unique().tolist())
@@ -152,9 +160,7 @@ with col_g:
 # Finalisasi Dataframe Terfilter
 df_f = df_temp.copy()
 
-# Filter Khusus Utilisasi (GoTrans & Exclude Cancel)
-if transporter_col in df_f.columns:
-    df_f = df_f[df_f[transporter_col] == "GoTrans Logistics International"]
+# Filter Khusus Exclude Status Cancel (Otomatis)
 if status_col in df_f.columns:
     df_f = df_f[~df_f[status_col].isin(["Cancel Order Approved", "Not Accepted", "Cancel Order Requested"])]
 
@@ -174,6 +180,14 @@ for d in pd.date_range(start_date, end_date):
     if d_date in id_holidays: continue
     hari_kerja += 1
 
+# --- FUNGSI FORMAT MATA UANG PINTAR ---
+def format_rp(angka):
+    if angka >= 1e9: 
+        return f"Rp {angka/1e9:,.2f} M"  # Untuk Miliar
+    elif angka >= 1e6: 
+        return f"Rp {angka/1e6:,.1f} Jt" # Untuk Juta
+    return f"Rp {angka:,.0f}"            # Untuk Ratusan Ribu ke bawah
+
 # --- PIVOT TABLE & AGREGASI ---
 st.markdown(f"### 🚛 Hasil Utilisasi (SLA: {hari_kerja} Hari Kerja)")
 
@@ -182,11 +196,14 @@ try:
     df_f[rev_col] = pd.to_numeric(df_f[rev_col], errors='coerce').fillna(0)
     df_f['Work Day'] = hari_kerja
     
+    total_mrc_rp = df_f[mrc_col].sum()
+    total_rev_rp = df_f[rev_col].sum()
+    
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Ritase (Order)", f"{len(df_f):,}")
     c2.metric("Armada Aktif", f"{df_f[nopol_col].nunique()} Unit")
-    c3.metric("Total MRC", f"Rp {df_f[mrc_col].sum()/1e6:.1f} Jt")
-    c4.metric("Total Revenue", f"Rp {df_f[rev_col].sum()/1e6:.1f} Jt")
+    c3.metric("Total MRC", format_rp(total_mrc_rp))
+    c4.metric("Total Revenue", format_rp(total_rev_rp))
     
     pivot_df = df_f.groupby([nopol_col, def_col]).agg(
         Work_Day=('Work Day', 'mean'),
@@ -195,7 +212,6 @@ try:
         Total_Revenue=(rev_col, 'sum')
     ).reset_index()
     
-    # Simpan versi raw untuk Excel, dan versi format untuk Web
     pivot_excel = pivot_df.copy()
     pivot_df['Total_MRC'] = pivot_df['Total_MRC'].apply(lambda x: f"Rp {x:,.0f}")
     pivot_df['Total_Revenue'] = pivot_df['Total_Revenue'].apply(lambda x: f"Rp {x:,.0f}")
@@ -209,12 +225,13 @@ try:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         filter_info = pd.DataFrame({
-            'PARAMETER': ['Mode Waktu', 'Bulan/Tahun DB', 'Rentang Tanggal', 'SLA (Hari Kerja)', 'Filter Branch', 'Filter Client', 'Filter Group'],
+            'PARAMETER': ['Mode Waktu', 'Bulan/Tahun DB', 'Rentang Tanggal', 'SLA (Hari Kerja)', 'Filter Transporter', 'Filter Branch', 'Filter Client', 'Filter Group'],
             'NILAI YANG DIGUNAKAN': [
                 preset,
                 f"{pilih_bulan}-{pilih_tahun}" if preset == "Bulan Spesifik" else "Semua Tabel",
                 f"{start_date.strftime('%d %b %Y')} s/d {end_date.strftime('%d %b %Y')}", 
                 f"{hari_kerja} Hari", 
+                pilih_transporter,
                 pilih_branch, 
                 pilih_client, 
                 pilih_group
