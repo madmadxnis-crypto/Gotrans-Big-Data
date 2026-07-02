@@ -25,44 +25,67 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h2 style='text-align: left; color: #ffffff; font-weight: 800;'>📊 Report Utilisasi Armada Pintar</h2>", unsafe_allow_html=True)
-st.markdown("<p style='color: #94a3b8;'>Filter operasional saling mengunci & otomatis tercetak saat diunduh ke Excel.</p>", unsafe_allow_html=True)
+st.markdown("<p style='color: #94a3b8;'>Sistem otomatis mendeteksi Hari Kerja (SLA) & menyatukan data multi-bulan.</p>", unsafe_allow_html=True)
 st.markdown("<hr style='margin-top: 0px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 # --- KONEKSI & PARSING NAMA TABEL ---
 engine = create_engine(st.secrets["SUPABASE_URL"].strip())
 try:
     semua_tabel = inspect(engine).get_table_names()
-    # Asumsi nama tabel format "Bulan-Tahun" (contoh: Januari-2025)
     tabel_valid = [t for t in semua_tabel if '-' in t]
 except Exception:
     tabel_valid = []
 
 if not tabel_valid:
-    st.warning("Database belum tersedia atau format nama tabel salah.")
+    st.warning("Database belum tersedia atau format nama tabel tidak dikenali.")
     st.stop()
 
-# Pisahkan Bulan dan Tahun untuk Filter
+# Deteksi Dinamis Format Bulan & Tahun (Anti-Kebalik)
 bulan_set, tahun_set = set(), set()
 for t in tabel_valid:
     parts = t.split('-')
     if len(parts) >= 2:
-        bulan_set.add(parts[0])
-        tahun_set.add(parts[1])
+        if len(parts[0]) == 4:  # Jika YYYY-MM
+            tahun_set.add(parts[0])
+            bulan_set.add(parts[1])
+        else:                   # Jika MM-YYYY
+            bulan_set.add(parts[0])
+            tahun_set.add(parts[1])
 
-# --- BARIS 1: FILTER DATABASE & TANGGAL ---
-col_bln, col_thn, col_start, col_end = st.columns(4)
+# --- BARIS 1: FILTER WAKTU (PRESET & MANUAL) ---
+col_preset, col_bln, col_thn, col_start, col_end = st.columns([1.5, 1, 1, 1.2, 1.2])
 
-with col_bln: pilih_bulan = st.selectbox("Bulan:", sorted(list(bulan_set)))
-with col_thn: pilih_tahun = st.selectbox("Tahun:", sorted(list(tahun_set), reverse=True))
+with col_preset:
+    preset = st.selectbox("Mode Filter Waktu:", ["Bulan Spesifik", "All Time", "Last 3 Months", "Last 6 Months", "Last 1 Year"])
 
-target_table = f"{pilih_bulan}-{pilih_tahun}"
+with col_bln:
+    pilih_bulan = st.selectbox("Bulan:", sorted(list(bulan_set)), disabled=(preset != "Bulan Spesifik"))
+with col_thn:
+    pilih_tahun = st.selectbox("Tahun:", sorted(list(tahun_set), reverse=True), disabled=(preset != "Bulan Spesifik"))
 
-if target_table not in tabel_valid:
-    st.error(f"⚠️ Data untuk {pilih_bulan} {pilih_tahun} belum tersedia di database.")
+# --- PENGAMBILAN DATA BERDASARKAN MODE ---
+df_list = []
+if preset == "Bulan Spesifik":
+    # Susun ulang nama tabel sesuai yang ada di database
+    target_table = f"{pilih_tahun}-{pilih_bulan}" if f"{pilih_tahun}-{pilih_bulan}" in tabel_valid else f"{pilih_bulan}-{pilih_tahun}"
+    if target_table in tabel_valid:
+        df_list.append(pd.read_sql(f'SELECT * FROM "{target_table}"', engine))
+    else:
+        st.error(f"⚠️ Data untuk {pilih_bulan}-{pilih_tahun} tidak ditemukan.")
+        st.stop()
+else:
+    with st.spinner(f"Menyatukan data {preset} dari seluruh tabel di database..."):
+        for t in tabel_valid:
+            try:
+                df_list.append(pd.read_sql(f'SELECT * FROM "{t}"', engine))
+            except:
+                pass
+
+if not df_list:
+    st.error("Gagal menarik data dari database.")
     st.stop()
 
-# Load Data based on selected month & year
-df = pd.read_sql(f'SELECT * FROM "{target_table}"', engine)
+df = pd.concat(df_list, ignore_index=True)
 
 # Deteksi Kolom Otomatis
 date_col = next((c for c in df.columns if any(k in c.lower() for k in ['tanggal', 'tgl', 'date', 'surat_jalan'])), df.columns[0])
@@ -80,11 +103,30 @@ rev_col = df.columns[97] if len(df.columns) > 97 else "Revenue"
 df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
 df_valid = df.dropna(subset=[date_col])
 
-min_date = df_valid[date_col].min().date() if not df_valid.empty else datetime.date.today()
-max_date = df_valid[date_col].max().date() if not df_valid.empty else datetime.date.today()
+min_db_date = df_valid[date_col].min().date() if not df_valid.empty else datetime.date.today()
+max_db_date = df_valid[date_col].max().date() if not df_valid.empty else datetime.date.today()
+today = datetime.date.today()
 
-with col_start: start_date = st.date_input("Mulai Tanggal:", value=min_date, format="DD/MM/YYYY")
-with col_end: end_date = st.date_input("Sampai Tanggal:", value=max_date, format="DD/MM/YYYY")
+# Logika Otomatis Preset Waktu
+if preset == "All Time":
+    def_start, def_end = min_db_date, max_db_date
+elif preset == "Last 3 Months":
+    def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(months=3)).date(), today
+elif preset == "Last 6 Months":
+    def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(months=6)).date(), today
+elif preset == "Last 1 Year":
+    def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(years=1)).date(), today
+else: # Bulan Spesifik
+    def_start, def_end = min_db_date, max_db_date
+
+if def_start > def_end: def_start = def_end
+
+with col_start: start_date = st.date_input("Mulai Tanggal:", value=def_start, format="DD/MM/YYYY")
+with col_end: end_date = st.date_input("Sampai Tanggal:", value=def_end, format="DD/MM/YYYY")
+
+if start_date > end_date:
+    st.error("⚠️ Mulai Tanggal tidak boleh lebih besar dari Sampai Tanggal.")
+    st.stop()
 
 # --- FILTER DATA AWAL (BERDASARKAN TANGGAL) ---
 df_temp = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_col].dt.date <= end_date)].copy()
@@ -92,26 +134,20 @@ df_temp = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_c
 # --- BARIS 2: FILTER SALING MENGUNCI (CASCADING) ---
 col_b, col_c, col_g = st.columns(3)
 
-# 1. Branch Filter (Mengunci Client & Group)
 with col_b:
     opsi_b = ["Semua"] + sorted(df_temp[branch_col].astype(str).dropna().unique().tolist())
     pilih_branch = st.selectbox("Branch:", opsi_b)
-    if pilih_branch != "Semua":
-        df_temp = df_temp[df_temp[branch_col].astype(str) == pilih_branch]
+    if pilih_branch != "Semua": df_temp = df_temp[df_temp[branch_col].astype(str) == pilih_branch]
 
-# 2. Client Filter (Mengunci Group, setelah Branch dipilih)
 with col_c:
     opsi_c = ["Semua"] + sorted(df_temp[client_col].astype(str).dropna().unique().tolist())
     pilih_client = st.selectbox("Client:", opsi_c)
-    if pilih_client != "Semua":
-        df_temp = df_temp[df_temp[client_col].astype(str) == pilih_client]
+    if pilih_client != "Semua": df_temp = df_temp[df_temp[client_col].astype(str) == pilih_client]
 
-# 3. Group Filter (Terkunci oleh Branch dan Client sebelumnya)
 with col_g:
     opsi_g = ["Semua"] + sorted(df_temp[group_col].astype(str).dropna().unique().tolist())
     pilih_group = st.selectbox("Group:", opsi_g)
-    if pilih_group != "Semua":
-        df_temp = df_temp[df_temp[group_col].astype(str) == pilih_group]
+    if pilih_group != "Semua": df_temp = df_temp[df_temp[group_col].astype(str) == pilih_group]
 
 # Finalisasi Dataframe Terfilter
 df_f = df_temp.copy()
@@ -172,13 +208,12 @@ try:
     # --- PROSES EXCEL DENGAN HEADER FILTER ---
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        # 1. Buat Header Info Filter
         filter_info = pd.DataFrame({
-            'PARAMETER': ['Bulan Database', 'Tahun Database', 'Rentang Tanggal', 'SLA (Hari Kerja)', 'Filter Branch', 'Filter Client', 'Filter Group'],
+            'PARAMETER': ['Mode Waktu', 'Bulan/Tahun DB', 'Rentang Tanggal', 'SLA (Hari Kerja)', 'Filter Branch', 'Filter Client', 'Filter Group'],
             'NILAI YANG DIGUNAKAN': [
-                pilih_bulan, 
-                pilih_tahun, 
-                f"{start_date.strftime('%d %B %Y')} s/d {end_date.strftime('%d %B %Y')}", 
+                preset,
+                f"{pilih_bulan}-{pilih_tahun}" if preset == "Bulan Spesifik" else "Semua Tabel",
+                f"{start_date.strftime('%d %b %Y')} s/d {end_date.strftime('%d %b %Y')}", 
                 f"{hari_kerja} Hari", 
                 pilih_branch, 
                 pilih_client, 
@@ -186,17 +221,14 @@ try:
             ]
         })
         
-        # 2. Tulis Info Filter di baris paling atas (Mulai dari A1)
         filter_info.to_excel(writer, index=False, sheet_name='PivotUtilisasi', startrow=0, startcol=0)
-        
-        # 3. Tulis Pivot Data di bawahnya (dikasih jarak 2 baris biar rapi)
         start_row_pivot = len(filter_info) + 2
         pivot_excel.to_excel(writer, index=False, sheet_name='PivotUtilisasi', startrow=start_row_pivot, startcol=0)
     
     st.download_button(
         label="📥 Ekstrak Report & Filter ke Excel",
         data=buffer.getvalue(),
-        file_name=f"Utilisasi_Armada_{pilih_bulan}_{pilih_tahun}.xlsx",
+        file_name=f"Utilisasi_Armada_{preset.replace(' ', '_')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
