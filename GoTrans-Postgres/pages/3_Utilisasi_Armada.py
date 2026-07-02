@@ -29,7 +29,6 @@ col_title, col_home = st.columns([4, 1])
 with col_title:
     st.markdown("<h2 style='margin-top: 0px; color: #ffffff; font-weight: 800;'>📊 Report Utilisasi Armada Pintar</h2>", unsafe_allow_html=True)
 with col_home:
-    # Tombol HTML/Streamlit untuk redirect kembali ke Halaman Utama (app.py)
     if st.button("🏠 Kembali ke Home", use_container_width=True):
         st.switch_page("app.py")
 
@@ -48,7 +47,6 @@ if not tabel_valid:
     st.warning("Database belum tersedia atau format nama tabel tidak dikenali.")
     st.stop()
 
-# Deteksi Dinamis Format Bulan & Tahun
 bulan_set, tahun_set = set(), set()
 for t in tabel_valid:
     parts = t.split('-')
@@ -71,7 +69,6 @@ with col_bln:
 with col_thn:
     pilih_tahun = st.selectbox("Tahun:", sorted(list(tahun_set), reverse=True), disabled=(preset != "Bulan Spesifik"))
 
-# --- PENGAMBILAN DATA BERDASARKAN MODE ---
 df_list = []
 if preset == "Bulan Spesifik":
     target_table = f"{pilih_tahun}-{pilih_bulan}" if f"{pilih_tahun}-{pilih_bulan}" in tabel_valid else f"{pilih_bulan}-{pilih_tahun}"
@@ -94,7 +91,6 @@ if not df_list:
 
 df = pd.concat(df_list, ignore_index=True)
 
-# Deteksi Kolom Otomatis
 date_col = next((c for c in df.columns if any(k in c.lower() for k in ['tanggal', 'tgl', 'date', 'surat_jalan'])), df.columns[0])
 branch_col = df.columns[3] if len(df.columns) > 3 else df.columns[0]
 client_col = df.columns[12] if len(df.columns) > 12 else df.columns[0]
@@ -110,9 +106,8 @@ rev_col = df.columns[97] if len(df.columns) > 97 else "Revenue"
 df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
 df_valid = df.dropna(subset=[date_col])
 
-# LOGIKA DEFAULT TANGGAL TERBARU DINAMIS (Tanggal 1 s/d Hari Ini)
 today = datetime.date.today()
-start_of_month = today.replace(day=1) # Otomatis set ke tanggal 1 di bulan berjalan
+start_of_month = today.replace(day=1) 
 
 min_db_date = df_valid[date_col].min().date() if not df_valid.empty else start_of_month
 max_db_date = df_valid[date_col].max().date() if not df_valid.empty else today
@@ -125,10 +120,9 @@ elif preset == "Last 6 Months":
     def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(months=6)).date(), today
 elif preset == "Last 1 Year":
     def_start, def_end = (pd.to_datetime(today) - pd.DateOffset(years=1)).date(), today
-else: # Bulan Spesifik (Default langsung 1 s/d Hari Ini)
+else: 
     def_start, def_end = start_of_month, today
 
-# Proteksi crash jika rentang database lebih kecil
 if def_start > def_end: 
     def_start = def_end
 
@@ -139,10 +133,9 @@ if start_date > end_date:
     st.error("⚠️ Mulai Tanggal tidak boleh lebih besar dari Sampai Tanggal.")
     st.stop()
 
-# --- FILTER DATA AWAL (BERDASARKAN TANGGAL) ---
 df_temp = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_col].dt.date <= end_date)].copy()
 
-# --- BARIS 2: FILTER SALING MENGUNCI DENGAN TRANSPORTER (CASCADING) ---
+# --- BARIS 2: FILTER SALING MENGUNCI LOKASI & VENDOR ---
 col_t, col_b, col_c, col_g = st.columns(4)
 
 with col_t:
@@ -167,6 +160,23 @@ with col_g:
     pilih_group = st.selectbox("Group:", opsi_g)
     if pilih_group != "Semua": df_temp = df_temp[df_temp[group_col].astype(str) == pilih_group]
 
+
+# --- BARIS 3: FILTER KENDARAAN (MULTI-SELECT) ---
+col_def, col_nopol = st.columns(2)
+
+with col_def:
+    opsi_def = sorted(df_temp[def_col].astype(str).dropna().unique().tolist())
+    pilih_def = st.multiselect("Definition (Bisa pilih lebih dari satu):", opsi_def, placeholder="Pilih tipe mobil... (Kosongi untuk Semua)")
+    if pilih_def:
+        df_temp = df_temp[df_temp[def_col].astype(str).isin(pilih_def)]
+
+with col_nopol:
+    opsi_nopol = sorted(df_temp[nopol_col].astype(str).dropna().unique().tolist())
+    pilih_nopol = st.multiselect("No Polisi (Ketik nopol):", opsi_nopol, placeholder="Ketik plat nomor... (Kosongi untuk Semua)")
+    if pilih_nopol:
+        df_temp = df_temp[df_temp[nopol_col].astype(str).isin(pilih_nopol)]
+
+
 # Finalisasi Dataframe Terfilter
 df_f = df_temp.copy()
 
@@ -189,7 +199,6 @@ for d in pd.date_range(start_date, end_date):
     if d_date in id_holidays: continue
     hari_kerja += 1
 
-# --- FUNGSI FORMAT MATA UANG PINTAR ---
 def format_rp(angka):
     if angka >= 1e9: 
         return f"Rp {angka/1e9:,.2f} M"
@@ -234,7 +243,11 @@ try:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         filter_info = pd.DataFrame({
-            'PARAMETER': ['Mode Waktu', 'Bulan/Tahun DB', 'Rentang Tanggal', 'SLA (Hari Kerja)', 'Filter Transporter', 'Filter Branch', 'Filter Client', 'Filter Group'],
+            'PARAMETER': [
+                'Mode Waktu', 'Bulan/Tahun DB', 'Rentang Tanggal', 'SLA (Hari Kerja)', 
+                'Filter Transporter', 'Filter Branch', 'Filter Client', 'Filter Group',
+                'Filter Definition', 'Filter No Polisi'
+            ],
             'NILAI YANG DIGUNAKAN': [
                 preset,
                 f"{pilih_bulan}-{pilih_tahun}" if preset == "Bulan Spesifik" else "Semua Tabel",
@@ -243,7 +256,9 @@ try:
                 pilih_transporter,
                 pilih_branch, 
                 pilih_client, 
-                pilih_group
+                pilih_group,
+                ", ".join(pilih_def) if pilih_def else "Semua",
+                ", ".join(pilih_nopol) if pilih_nopol else "Semua"
             ]
         })
         
