@@ -3,6 +3,7 @@ import pandas as pd
 from sqlalchemy import create_engine, inspect
 import plotly.express as px
 import datetime
+import calendar # Tambahan library buat ngitung tanggal terakhir di suatu bulan otomatis
 import io 
 
 # 1. Konfigurasi Halaman
@@ -94,8 +95,26 @@ c1, c2, c3, c4, c5 = st.columns(5)
 with c1: filter_waktu = st.selectbox("Filter Waktu:", ["Bulan", "Harian"])
 with c2: val_bulan = st.selectbox("Bulan:", [f"{i:02d}" for i in range(1, 13)], index=datetime.datetime.now().month - 1)
 with c3: val_tahun = st.selectbox("Tahun:", [str(y) for y in range(2024, 2028)], index=2) # Default 2026
-with c4: start_date = st.date_input("Mulai Tanggal:")
-with c5: end_date = st.date_input("Sampai Tanggal:")
+
+# --- LOGIKA DEFAULT TANGGAL OTOMATIS ---
+tahun_int = int(val_tahun)
+bulan_int = int(val_bulan)
+hari_ini = datetime.date.today()
+
+# Default mulai tanggal selalu tanggal 1 di bulan yang dipilih
+default_start = datetime.date(tahun_int, bulan_int, 1)
+
+# Default sampai tanggal ngikutin kondisi
+if tahun_int == hari_ini.year and bulan_int == hari_ini.month:
+    default_end = hari_ini # Kalau bulan ini, mentok di hari ini
+else:
+    # Kalau bulan lalu, cari tanggal terakhir di bulan itu (misal 30 atau 31)
+    last_day = calendar.monthrange(tahun_int, bulan_int)[1]
+    default_end = datetime.date(tahun_int, bulan_int, last_day)
+
+with c4: start_date = st.date_input("Mulai Tanggal:", value=default_start)
+with c5: end_date = st.date_input("Sampai Tanggal:", value=default_end)
+# ----------------------------------------
 
 # Nama tabel dinamis berdasarkan filter Bulan & Tahun di atas
 tabel_aktif = f"{val_tahun}-{val_bulan}"
