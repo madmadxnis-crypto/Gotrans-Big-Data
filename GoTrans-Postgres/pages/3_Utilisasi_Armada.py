@@ -27,12 +27,12 @@ st.markdown("""
 # --- NAVIGASI BACK TO HOME SEJAJAR JUDUL ---
 col_title, col_home = st.columns([4, 1])
 with col_title:
-    st.markdown("<h2 style='margin-top: 0px; color: #ffffff; font-weight: 800;'>📊 Report Utilisasi Armada Pintar</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='margin-top: 0px; color: #ffffff; font-weight: 800;'>📝Utilisasi Armada📝</h2>", unsafe_allow_html=True)
 with col_home:
     if st.button("🏠 Kembali ke Home", use_container_width=True):
         st.switch_page("app.py")
 
-st.markdown("<p style='color: #94a3b8; margin-top: -10px;'>Sistem otomatis mendeteksi Hari Kerja (SLA) & menyatukan data multi-bulan.</p>", unsafe_allow_html=True)
+st.markdown("<p style='color: #94a3b8; margin-top: -10px;'>Otomatis mendeteksi Hari Kerja</p>", unsafe_allow_html=True)
 st.markdown("<hr style='margin-top: 0px; margin-bottom: 15px;'>", unsafe_allow_html=True)
 
 # --- KONEKSI & PARSING NAMA TABEL ---
@@ -62,7 +62,7 @@ for t in tabel_valid:
 col_preset, col_bln, col_thn, col_start, col_end = st.columns([1.5, 1, 1, 1.2, 1.2])
 
 with col_preset:
-    preset = st.selectbox("Mode Filter Waktu:", ["Bulan Spesifik", "All Time", "Last 3 Months", "Last 6 Months", "Last 1 Year"])
+    preset = st.selectbox("Filter Waktu:", ["Bulan", "All Time", "Last 3 Months", "Last 6 Months", "Last 1 Year"])
 
 with col_bln:
     pilih_bulan = st.selectbox("Bulan:", sorted(list(bulan_set)), disabled=(preset != "Bulan Spesifik"))
@@ -166,13 +166,13 @@ col_def, col_nopol = st.columns(2)
 
 with col_def:
     opsi_def = sorted(df_temp[def_col].astype(str).dropna().unique().tolist())
-    pilih_def = st.multiselect("Definition (Bisa pilih lebih dari satu):", opsi_def, placeholder="Pilih tipe mobil... (Kosongi untuk Semua)")
+    pilih_def = st.multiselect("Type Mobil:", opsi_def, placeholder="bisa pilih banyak tipe")
     if pilih_def:
         df_temp = df_temp[df_temp[def_col].astype(str).isin(pilih_def)]
 
 with col_nopol:
     opsi_nopol = sorted(df_temp[nopol_col].astype(str).dropna().unique().tolist())
-    pilih_nopol = st.multiselect("No Polisi (Ketik nopol):", opsi_nopol, placeholder="Ketik plat nomor... (Kosongi untuk Semua)")
+    pilih_nopol = st.multiselect("No Polisi :", opsi_nopol, placeholder="bisa pilih banyak Nopol")
     if pilih_nopol:
         df_temp = df_temp[df_temp[nopol_col].astype(str).isin(pilih_nopol)]
 
@@ -207,7 +207,7 @@ def format_rp(angka):
     return f"Rp {angka:,.0f}"
 
 # --- PIVOT TABLE & AGREGASI ---
-st.markdown(f"### 🚛 Hasil Utilisasi (SLA: {hari_kerja} Hari Kerja)")
+st.markdown(f"### 🚛 Utilisasi (SLA: {hari_kerja} Hari Kerja)")
 
 try:
     df_f[mrc_col] = pd.to_numeric(df_f[mrc_col], errors='coerce').fillna(0)
@@ -218,7 +218,7 @@ try:
     total_rev_rp = df_f[rev_col].sum()
     
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Ritase (Order)", f"{len(df_f):,}")
+    c1.metric("Total Ritase (Sales Order)", f"{len(df_f):,}")
     c2.metric("Armada Aktif", f"{df_f[nopol_col].nunique()} Unit")
     c3.metric("Total MRC", format_rp(total_mrc_rp))
     c4.metric("Total Revenue", format_rp(total_rev_rp))
