@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine
 import plotly.express as px
+import datetime
 
-st.set_page_config(page_title="Time Series Analysis", layout="wide")
+st.set_page_config(page_title="Daily Performance", layout="wide")
 
 # CSS Futuristis
 st.markdown("""
@@ -12,52 +13,42 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📈 Time Series & MoM Growth")
-st.markdown("---")
-
+st.title("📊 Daily Run-Rate & Performance")
 engine = create_engine(st.secrets["SUPABASE_URL"].strip())
 
-def get_monthly_total(tabel_nama):
-    try:
-        df = pd.read_sql(f'SELECT * FROM "{tabel_nama}"', engine)
-        rev_col = df.columns[97]
-        # Total Revenue
-        return pd.to_numeric(df[rev_col], errors='coerce').sum()
-    except:
-        return 0
+# Ambil bulan berjalan
+today = datetime.date.today()
+tabel_aktif = f"{today.year}-{today.month:02d}"
 
-# 1. Ambil list tabel untuk dibandingin
-tabel_valid = sorted([t for t in pd.read_sql("SELECT table_name FROM information_schema.tables WHERE table_schema='public'", engine)['table_name'] if '-' in t])
-
-# 2. Logic Perbandingan MoM
-if len(tabel_valid) >= 2:
-    data_tren = []
-    for t in tabel_valid:
-        total = get_monthly_total(t)
-        data_tren.append({'Bulan': t, 'Revenue': total})
+try:
+    df = pd.read_sql(f'SELECT * FROM "{tabel_aktif}"', engine)
     
-    df_tren = pd.DataFrame(data_tren)
+    # Deteksi kolom tanggal dan revenue
+    date_col = next((c for c in df.columns if any(k in c.lower() for k in ['tanggal', 'tgl', 'date'])), df.columns[0])
+    rev_col = df.columns[97]
+    cost_col = df.columns[98]
     
-    # Hitung Growth %
-    df_tren['Growth (%)'] = df_tren['Revenue'].pct_change() * 100
+    df[date_col] = pd.to_datetime(df[date_col])
+    df['Revenue'] = pd.to_numeric(df[rev_col], errors='coerce').fillna(0)
+    df['Cost'] = pd.to_numeric(df[cost_col], errors='coerce').fillna(0)
+    df['Margin'] = df['Revenue'] - df['Cost']
     
-    # Tampilan Metrik Perbandingan Bulan Terakhir
-    bln_ini = df_tren.iloc[-1]
-    bln_lalu = df_tren.iloc[-2]
+    # Grouping Harian
+    df_daily = df.groupby(df[date_col].dt.date).agg({'Revenue':'sum', 'Cost':'sum', 'Margin':'sum'}).reset_index()
+    df_daily.columns = ['Tanggal', 'Revenue', 'Cost', 'Margin']
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Revenue Bulan Ini", f"Rp {bln_ini['Revenue']/1e6:,.1f} Jt")
-    col2.metric("Revenue Bulan Lalu", f"Rp {bln_lalu['Revenue']/1e6:,.1f} Jt")
-    col3.metric("Growth", f"{bln_ini['Growth (%)']:.1f}%", delta=f"{bln_ini['Growth (%)']:.1f}%")
-
+    # Metrik Daily Run-Rate
+    st.subheader(f"Performa Harian - {today.strftime('%B %Y')}")
+    
     # Visualisasi
-    st.markdown("### Tren Pertumbuhan Revenue")
-    fig = px.bar(df_tren, x='Bulan', y='Revenue', text_auto='.2s', template="plotly_dark", color_discrete_sequence=['#38bdf8'])
+    fig = px.line(df_daily, x='Tanggal', y=['Revenue', 'Cost', 'Margin'], 
+                  template="plotly_dark", 
+                  title="Tren Daily Performance (Revenue, Cost, Margin)")
     fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig, use_container_width=True)
     
-    st.markdown("### Detail Pertumbuhan per Bulan")
-    st.dataframe(df_tren, use_container_width=True)
-
-else:
-    st.warning("Butuh minimal 2 tabel bulan yang berbeda untuk analisis tren!")
+    # Tabel Daily
+    st.dataframe(df_daily.sort_values('Tanggal', ascending=False), use_container_width=True)
+    
+except Exception as e:
+    st.error(f"Error load data harian: {e}")
