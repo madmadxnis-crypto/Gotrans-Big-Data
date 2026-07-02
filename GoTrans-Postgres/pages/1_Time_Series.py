@@ -52,14 +52,29 @@ df_lalu['Day'] = pd.to_datetime(df_lalu['Tanggal']).dt.day
 
 df_compare = pd.merge(df_ini, df_lalu, on='Day', suffixes=('_Ini', '_Lalu'), how='outer').fillna(0)
 
-# --- LOAD DATA TAHUNAN (DAY BY DAY) ---
+# --- LOAD DATA TAHUNAN (DAY BY DAY, per-bulan biar bisa di-overlay by tanggal) ---
+BULAN_ID = {
+    1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei", 6: "Juni",
+    7: "Juli", 8: "Agustus", 9: "September", 10: "Oktober", 11: "November", 12: "Desember"
+}
+
 @st.cache_data
 def get_annual_data():
     all_data = []
-    for i in range(12):
+    for i in range(11, -1, -1):  # urut dari 11 bulan lalu -> bulan ini
         d = today - pd.DateOffset(months=i)
         tabel = f"{d.year}-{d.month:02d}"
-        all_data.append(get_daily_data(tabel))
+        df_bulan = get_daily_data(tabel)
+        if df_bulan.empty:
+            continue
+        df_bulan = df_bulan.sort_values('Tanggal').reset_index(drop=True)
+        df_bulan['Day'] = pd.to_datetime(df_bulan['Tanggal']).dt.day
+        df_bulan['Cumulative'] = df_bulan['Revenue'].cumsum()
+        df_bulan['Bulan'] = f"{BULAN_ID[d.month]} {d.year}"
+        df_bulan['BulanUrut'] = d.year * 100 + d.month  # buat sorting legend biar kronologis
+        all_data.append(df_bulan)
+    if not all_data:
+        return pd.DataFrame(columns=['Tanggal', 'Revenue', 'Day', 'Cumulative', 'Bulan', 'BulanUrut'])
     return pd.concat(all_data, ignore_index=True)
 
 df_annual = get_annual_data()
@@ -146,10 +161,40 @@ with tab1:
     st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
-    st.markdown("### Analisis Harian 12 Bulan Terakhir")
-    # Line chart lebih masuk akal daripada bar chart untuk 365 data points
-    fig_yr = px.line(df_annual.sort_values('Tanggal'), x='Tanggal', y='Revenue', template="plotly_dark", color_discrete_sequence=['#10b981'])
-    fig_yr.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', xaxis_rangeslider_visible=True)
-    st.plotly_chart(fig_yr, use_container_width=True)
+    st.markdown("### Perbandingan Cumulative Revenue per Tanggal (12 Bulan Terakhir)")
+    st.caption("Sumbu X = tanggal (1-31), tiap garis = satu bulan, sehingga tgl 3 Januari vs tgl 3 Februari vs tgl 3 Maret dst. bisa langsung dibandingkan.")
 
-    st.dataframe(df_annual.sort_values('Tanggal', ascending=False), use_container_width=True)
+    if df_annual.empty:
+        st.warning("Data belum tersedia.")
+    else:
+        urutan_bulan = (
+            df_annual[['Bulan', 'BulanUrut']]
+            .drop_duplicates()
+            .sort_values('BulanUrut')['Bulan']
+            .tolist()
+        )
+
+        fig_yr = px.line(
+            df_annual.sort_values(['BulanUrut', 'Day']),
+            x='Day',
+            y='Cumulative',
+            color='Bulan',
+            category_orders={'Bulan': urutan_bulan},
+            template="plotly_dark",
+            markers=True,
+            labels={'Day': 'Tanggal', 'Cumulative': 'Cumulative Revenue', 'Bulan': 'Bulan'}
+        )
+        fig_yr.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(dtick=1, title="Tanggal"),
+            legend_title_text='Bulan'
+        )
+        st.plotly_chart(fig_yr, use_container_width=True)
+
+    st.markdown("---")
+    st.markdown("### Data Detail Harian")
+    st.dataframe(
+        df_annual.sort_values(['BulanUrut', 'Day'], ascending=[False, False])[['Tanggal', 'Bulan', 'Day', 'Revenue', 'Cumulative']],
+        use_container_width=True
+    )
