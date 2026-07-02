@@ -86,7 +86,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 DATABASE_URL = st.secrets["SUPABASE_URL"].strip()
 engine = create_engine(DATABASE_URL)
 
-# 5. FILTER OPERASIONAL BARU (Gaya Utilisasi Armada diletakkan di halaman utama)
+# 5. FILTER OPERASIONAL BARU
 st.markdown("<h3 style='color: #38bdf8;'>Filter Operasional</h3>", unsafe_allow_html=True)
 
 # Baris 1: Filter Waktu & Tanggal
@@ -104,7 +104,7 @@ query = f'SELECT * FROM "{tabel_aktif}"'
 try:
     df = pd.read_sql(query, engine)
     
-    # --- DETEKSI KOLOM OTOMATIS (ASLI + Tambahan untuk Tipe Mobil & Nopol) ---
+    # --- DETEKSI KOLOM OTOMATIS (ASLI) ---
     date_col = next((c for c in df.columns if any(k in c.lower() for k in ['tanggal', 'tgl', 'date', 'surat_jalan'])), df.columns[0])
     branch_col = df.columns[3]   # Kolom D (Index 3)
     client_col = df.columns[12]  # Kolom M (Index 12)
@@ -112,10 +112,6 @@ try:
     group_col = next((c for c in df.columns if 'group' in c.lower()), None)
     if not group_col:
         group_col = df.columns[13] if len(df.columns) > 13 else client_col
-
-    # Deteksi Kolom Truk & Nopol (Index disesuaikan dengan standar jika ada)
-    tipe_col = next((c for c in df.columns if 'tipe' in c.lower() or 'type' in c.lower() or 'truk' in c.lower()), df.columns[33] if len(df.columns) > 33 else df.columns[0])
-    nopol_col = next((c for c in df.columns if 'polisi' in c.lower() or 'plat' in c.lower() or 'nopol' in c.lower()), df.columns[32] if len(df.columns) > 32 else df.columns[0])
 
     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
     df_valid = df.dropna(subset=[date_col])
@@ -130,20 +126,12 @@ try:
     opsi_branch = ["Semua"] + sorted(df_filtered[branch_col].dropna().unique().tolist())
     opsi_client = ["Semua"] + sorted(df_filtered[client_col].dropna().unique().tolist())
     opsi_group = ["Semua"] + sorted(df_filtered[group_col].dropna().unique().tolist())
-    opsi_tipe = sorted(df_filtered[tipe_col].dropna().unique().tolist())
-    opsi_nopol = sorted(df_filtered[nopol_col].dropna().unique().tolist())
 
-    # Baris 2: Filter Atribut
-    c6, c7, c8, c9 = st.columns(4)
-    with c6: transporter = st.selectbox("Transporter:", ["GoTrans Logistics International", "Semua"])
-    with c7: pilih_branch = st.selectbox("Branch:", opsi_branch)
-    with c8: pilih_client = st.selectbox("Client:", opsi_client)
-    with c9: pilih_group = st.selectbox("Group:", opsi_group)
-
-    # Baris 3: Filter Armada (Multiselect)
-    c10, c11 = st.columns(2)
-    with c10: type_mobil = st.multiselect("Type Mobil:", opsi_tipe, placeholder="bisa pilih banyak tipe")
-    with c11: no_polisi = st.multiselect("No Polisi :", opsi_nopol, placeholder="bisa pilih banyak Nopol")
+    # Baris 2: Filter Atribut Branch, Client, Group (Disesuaikan jadi 3 kolom agar rapi)
+    c6, c7, c8 = st.columns(3)
+    with c6: pilih_branch = st.selectbox("Branch:", opsi_branch)
+    with c7: pilih_client = st.selectbox("Client:", opsi_client)
+    with c8: pilih_group = st.selectbox("Group:", opsi_group)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -151,14 +139,12 @@ try:
     if pilih_branch != "Semua": df_filtered = df_filtered[df_filtered[branch_col] == pilih_branch]
     if pilih_client != "Semua": df_filtered = df_filtered[df_filtered[client_col] == pilih_client]
     if pilih_group != "Semua": df_filtered = df_filtered[df_filtered[group_col] == pilih_group]
-    if type_mobil: df_filtered = df_filtered[df_filtered[tipe_col].isin(type_mobil)]
-    if no_polisi: df_filtered = df_filtered[df_filtered[nopol_col].isin(no_polisi)]
 
     df_filtered = df_filtered.sort_values(by=date_col)
     st.markdown(f"<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -5px; text-align: center;'>Periode Aktif: {start_date.strftime('%d %b %Y')} s/d {end_date.strftime('%d %b %Y')} | Data Ditemukan: {len(df_filtered)} Baris</p>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 6. TAB KONTEN (Pengganti Sidebar Radio Button)
+    # 6. TAB KONTEN
     tab_ringkasan, tab_raw = st.tabs(["📈 Ringkasan Eksekutif", "🗄️ Data Raw Operasional"])
 
     with tab_ringkasan:
