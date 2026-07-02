@@ -159,7 +159,7 @@ if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
             df_filtered = df.copy()
 
         # --- BARIS FILTER OPERASIONAL BARU (BRANCH, CLIENT, GROUP) ---
-        st.markdown("<p style='color: #38bdf8; font-weight: 600; margin-bottom: 5px;'>Filter Operasional Lapangan:</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #38bdf8; font-weight: 600; margin-bottom: 5px;'>Filter:</p>", unsafe_allow_html=True)
         col_b, col_c, col_g = st.columns(3)
         
         with col_b:
