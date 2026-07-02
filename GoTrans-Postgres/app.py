@@ -3,297 +3,243 @@ import pandas as pd
 from sqlalchemy import create_engine, inspect
 import plotly.express as px
 import datetime
-import io # Wajib diimport untuk fitur unduh Excel
+import io
 
 # 1. Konfigurasi Halaman
 st.set_page_config(page_title="Gotrans TMS Dashboard", page_icon="Email-Signature-GLI.ico", layout="wide")
 
-# 2. BUNDLE CSS FUTURISTIK & ELEGAN
+# 2. BUNDLE CSS FUTURISTIK & CUSTOM SIDEBAR EASYGO STYLE
 st.markdown("""
     <style>
+    /* Tema Dasar */
     .stApp {
         background: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #1e293b 100%) !important;
         color: #f8fafc !important;
     }
+    
+    /* Custom Sidebar mirip EASYGO */
     [data-testid="stSidebar"] {
-        background-color: #0b0f19 !important;
-        border-right: 1px solid #1e293b !important;
+        background-color: #1f2336 !important; /* Warna dark blue EasyGo */
+        border-right: 1px solid #2d3248 !important;
     }
+    .easygo-menu {
+        font-family: 'Inter', sans-serif;
+        color: #a0a5b1;
+        font-size: 0.95rem;
+        line-height: 2.2;
+        cursor: pointer;
+    }
+    .easygo-menu-active {
+        color: #ffffff;
+        font-weight: 600;
+        background-color: #38bdf820;
+        padding-left: 10px;
+        border-left: 3px solid #38bdf8;
+        border-radius: 4px;
+    }
+    .easygo-indent-1 { padding-left: 20px; }
+    .easygo-indent-2 { padding-left: 40px; font-size: 0.85rem;}
+    
+    /* Metrik Card */
     div[data-testid="stMetric"] {
         background: rgba(17, 24, 39, 0.7) !important;
         backdrop-filter: blur(10px) !important;
         padding: 20px !important;
-        border-radius: 16px !important;
+        border-radius: 12px !important;
         border: 1px solid rgba(56, 189, 248, 0.2) !important;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
-        min-height: 160px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: space-between !important;
-    }
-    div[data-testid="stMetric"]:hover {
-        border: 1px solid rgba(56, 189, 248, 0.6) !important;
     }
     div[data-testid="stMetricValue"] {
         color: #38bdf8 !important;
-        font-family: 'Inter', sans-serif !important;
         font-weight: 700 !important;
-        font-size: 2rem !important;
-        text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+        font-size: 1.8rem !important;
     }
-    div[data-testid="stMetricLabel"] {
+    
+    /* Label Filter Custom */
+    .filter-label {
         color: #94a3b8 !important;
-        font-size: 0.9rem !important;
-        text-transform: uppercase !important;
-        letter-spacing: 1px !important;
-    }
-    hr {
-        border-color: rgba(56, 189, 248, 0.1) !important;
-    }
-    div[data-testid="stDateInput"] {
-        margin-top: 5px !important;
-    }
-    /* Style khusus tombol download Excel biar futuristik */
-    .stDownloadButton button {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-        color: white !important;
-        border: none !important;
-        padding: 10px 24px !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-        box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3) !important;
-        transition: all 0.3s ease !important;
-    }
-    .stDownloadButton button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 20px 0 rgba(16, 185, 129, 0.5) !important;
+        font-size: 0.85rem !important;
+        margin-bottom: -15px !important;
+        font-weight: 500 !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. HEADER
-col_space1, col_logo, col_space2 = st.columns([1.5, 2, 1.5]) 
-with col_logo:
-    try:
-        st.image("GoTrans-Postgres/logo_gobel.jpg", use_container_width=True)
-    except Exception:
-        st.warning("⚠️ Logo 'logo_gobel.jpg' tidak ditemukan.")
-
-st.markdown("<h1 style='text-align: center; color: #ffffff; font-size: 2.5rem; font-weight: 800; margin-top: 10px; margin-bottom: 0px;'>Gotrans Operational Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #38bdf8; font-size: 1.1rem; letter-spacing: 2px; font-weight: 500;'>TRANSPORT MANAGEMENT SYSTEM (TMS)</p>", unsafe_allow_html=True)
-st.markdown("<br>", unsafe_allow_html=True)
-
-# 4. KONEKSI DATABASE
+# 3. KONEKSI DATABASE
 DATABASE_URL = st.secrets["SUPABASE_URL"].strip()
 engine = create_engine(DATABASE_URL)
 
-# 5. SIDEBAR CONTROL
-st.sidebar.markdown("<h2 style='color: #38bdf8;'>NAVIGASI</h2>", unsafe_allow_html=True)
-menu = st.sidebar.radio("Pilih Menu:", ["Ringkasan Eksekutif", "Data Raw Operasional"])
-
+# ==========================================
+# 4. SIDEBAR NAVIGATION (EASYGO STYLE)
+# ==========================================
+st.sidebar.markdown("<h2 style='color: #ffffff; font-weight: 800; text-align: center;'>EASYGO <span style='font-size: 0.8rem; font-weight: 300; color: #38bdf8;'>TMS</span></h2>", unsafe_allow_html=True)
 st.sidebar.divider()
 
+# Tampilan Menu Statis (Bisa diubah jadi tombol/radio jika ingin difungsikan multi-page)
+st.sidebar.markdown("""
+<div class='easygo-menu'>🏠 Dashboard</div>
+<div class='easygo-menu'>📍 Real Monitoring</div>
+<div class='easygo-menu'>📂 Master</div>
+<div class='easygo-menu'>⚙️ Advance</div>
+<div class='easygo-menu'>📦 Order Management</div>
+<div class='easygo-menu'>📉 Report</div>
+<div class='easygo-menu easygo-indent-1'>• Safety Report</div>
+<div class='easygo-menu easygo-indent-1'>• Operational</div>
+<div class='easygo-menu easygo-indent-1'>▾ Trip History</div>
+<div class='easygo-menu easygo-indent-2'>Detail Report</div>
+<div class='easygo-menu easygo-indent-2'>Summary Report</div>
+<div class='easygo-menu easygo-indent-2'>Monthly Report</div>
+<div class='easygo-menu easygo-indent-2'>Monthly Update Unit</div>
+<div class='easygo-menu easygo-indent-2'>Parking Trip DO</div>
+<div class='easygo-menu easygo-indent-2'>Report Start Stop Trip</div>
+<div class='easygo-menu easygo-indent-2 easygo-menu-active'>Mileage Report</div>
+<div class='easygo-menu'>🚚 Delivery Order</div>
+""", unsafe_allow_html=True)
+
+
+# ==========================================
+# 5. HEADER UTAMA
+# ==========================================
+col_title, col_btn = st.columns([4, 1])
+with col_title:
+    st.markdown("<h1 style='color: #ffffff; font-size: 2.2rem; margin-bottom: 0px;'>📝 Utilisasi Armada Dashboard 📝</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #94a3b8; font-size: 1rem;'>Otomatis mendeteksi Hari Kerja</p>", unsafe_allow_html=True)
+with col_btn:
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.button("🏠 Kembali ke Home", use_container_width=True)
+
+st.divider()
+
+# ==========================================
+# 6. FILTER OPERASIONAL (GAYA UTILISASI ARMADA)
+# ==========================================
+# Baris 1: Filter Waktu & Tanggal
+c1, c2, c3, c4, c5 = st.columns(5)
+with c1: filter_waktu = st.selectbox("Filter Waktu:", ["Bulan", "Harian"])
+with c2: val_bulan = st.selectbox("Bulan:", [f"{i:02d}" for i in range(1, 13)], index=datetime.datetime.now().month - 1)
+with c3: val_tahun = st.selectbox("Tahun:", [str(y) for y in range(2024, 2028)], index=2) # Default 2026
+with c4: mulai_tgl = st.date_input("Mulai Tanggal:")
+with c5: sampai_tgl = st.date_input("Sampai Tanggal:")
+
+# Nama tabel dinamis berdasarkan filter Bulan & Tahun di atas (Bukan dari Sidebar lagi)
+tabel_aktif = f"{val_tahun}-{val_bulan}"
+
+# Proses Tarik Data Base untuk Opsi Filter
+df = pd.DataFrame()
+opsi_branch, opsi_client, opsi_group, opsi_tipe, opsi_nopol = ["Semua"], ["Semua"], ["Semua"], ["bisa pilih banyak tipe"], ["bisa pilih banyak Nopol"]
+
 try:
-    inspector = inspect(engine)
-    semua_tabel = inspector.get_table_names()
-    daftar_bulan = sorted([t for t in semua_tabel if '-' in t], reverse=True)
-except Exception:
-    daftar_bulan = ["Gagal membaca database"]
-
-if not daftar_bulan:
-    daftar_bulan = ["Data Belum Tersedia"]
-
-st.sidebar.markdown("<h2 style='color: #38bdf8;'>FILTER BULAN</h2>", unsafe_allow_html=True)
-bulan = st.sidebar.selectbox("Bulan Aktif", daftar_bulan)
-
-# 6. ENGINE PROSES UTAMA
-if bulan not in ["Gagal membaca database", "Data Belum Tersedia"]:
-    query = f'SELECT * FROM "{bulan}"'
-
-    try:
-        df = pd.read_sql(query, engine)
-        # --- DETEKSI KOLOM OTOMATIS MENGHINDARI INDEX ERROR ---
-        date_col = next((c for c in df.columns if any(k in c.lower() for k in ['tanggal', 'tgl', 'date', 'surat_jalan'])), df.columns[0])
-        branch_col = df.columns[3]   # Kolom D (Index 3)
-        client_col = df.columns[12]  # Kolom M (Index 12)
-        group_col = df.columns[7]    # Kolom H (Index 7) - FIXED
+    query = f'SELECT * FROM "{tabel_aktif}"'
+    df = pd.read_sql(query, engine)
+    
+    if not df.empty:
+        # Deteksi Kolom Otomatis
+        date_col = next((c for c in df.columns if any(k in c.lower() for k in ['tanggal', 'tgl', 'date'])), df.columns[0])
+        branch_col = df.columns[3] if len(df.columns) > 3 else df.columns[0]
+        client_col = df.columns[12] if len(df.columns) > 12 else df.columns[0]
+        group_col = next((c for c in df.columns if 'group' in c.lower()), df.columns[7] if len(df.columns) > 7 else df.columns[0])
         
-        # Deteksi otomatis untuk kolom Group
-        group_col = next((c for c in df.columns if 'group' in c.lower()), None)
-        if not group_col:
-            group_col = df.columns[13] if len(df.columns) > 13 else client_col
+        # Deteksi Kolom Truk & Nopol
+        tipe_col = next((c for c in df.columns if 'tipe_truk' in c.lower() or 'type' in c.lower()), df.columns[33] if len(df.columns) > 33 else df.columns[0])
+        nopol_col = next((c for c in df.columns if 'polisi' in c.lower() or 'plat' in c.lower()), df.columns[32] if len(df.columns) > 32 else df.columns[0])
 
         df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
         df_valid = df.dropna(subset=[date_col])
         
-        if df_valid.empty:
-            min_date, max_date = datetime.date.today(), datetime.date.today()
-        else:
-            min_date, max_date = df_valid[date_col].min().date(), df_valid[date_col].max().date()
-            
-        start_date, end_date = min_date, max_date
-
-        # --- BARIS JUDUL & FILTER TANGGAL SEJAJAR ---
-        col_judul, col_filter = st.columns([2.5, 1.5]) 
-        
-        def tampilkan_ringkasan():
-            if menu == "Ringkasan Eksekutif":
-                st.markdown(f"### 📈 Revenue")
-            elif menu == "Data Raw Operasional":
-                st.markdown(f"### 🗄️ Database Mentah Terfilter")
-
-        with col_filter:
-            if not df_valid.empty:
-                date_range = st.date_input("Rentang Analisis:", value=(min_date, max_date), min_value=min_date, max_value=max_date, label_visibility="collapsed")
-                if isinstance(date_range, tuple):
-                    start_date = date_range[0]
-                    end_date = date_range[1] if len(date_range) > 1 else date_range[0]
-                else:
-                    start_date = date_range
-                    end_date = date_range
-
-        # Saringan Awal: Rentang Tanggal
+        # Update Opsi Filter
         if not df_valid.empty:
-            df_filtered = df_valid[(df_valid[date_col].dt.date >= start_date) & (df_valid[date_col].dt.date <= end_date)].copy()
-        else:
-            df_filtered = df.copy()
+            opsi_branch += sorted(df_valid[branch_col].dropna().unique().tolist())
+            opsi_client += sorted(df_valid[client_col].dropna().unique().tolist())
+            opsi_group += sorted(df_valid[group_col].dropna().unique().tolist())
+            opsi_tipe += sorted(df_valid[tipe_col].dropna().unique().tolist())
+            opsi_nopol += sorted(df_valid[nopol_col].dropna().unique().tolist())
+except Exception:
+    st.warning(f"⚠️ Data untuk periode {tabel_aktif} belum tersedia di database.")
 
-        # --- BARIS FILTER OPERASIONAL BARU (BRANCH, CLIENT, GROUP) ---
-        st.markdown("<p style='color: #38bdf8; font-weight: 600; margin-bottom: 5px;'>Filter:</p>", unsafe_allow_html=True)
-        col_b, col_c, col_g = st.columns(3)
+# Baris 2: Atribut Logistik
+c6, c7, c8, c9 = st.columns(4)
+with c6: transporter = st.selectbox("Transporter:", ["GoTrans Logistics International", "Lainnya"])
+with c7: branch = st.selectbox("Branch:", opsi_branch)
+with c8: client = st.selectbox("Client:", opsi_client)
+with c9: group = st.selectbox("Group:", opsi_group)
+
+# Baris 3: Armada
+c10, c11 = st.columns(2)
+with c10: type_mobil = st.multiselect("Type Mobil:", opsi_tipe, default=opsi_tipe[0] if opsi_tipe else None)
+with c11: no_polisi = st.multiselect("No Polisi :", opsi_nopol, default=opsi_nopol[0] if opsi_nopol else None)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ==========================================
+# 7. ENGINE PROSES & RENDER METRIK
+# ==========================================
+if not df.empty and 'df_valid' in locals() and not df_valid.empty:
+    # 1. Filter Tanggal (Range Input Utama)
+    df_filtered = df_valid[(df_valid[date_col].dt.date >= mulai_tgl) & (df_valid[date_col].dt.date <= sampai_tgl)].copy()
+    
+    # 2. Filter Dropdown Operasional
+    if branch != "Semua": df_filtered = df_filtered[df_filtered[branch_col] == branch]
+    if client != "Semua": df_filtered = df_filtered[df_filtered[client_col] == client]
+    if group != "Semua": df_filtered = df_filtered[df_filtered[group_col] == group]
+    
+    # Filter Multiselect
+    if type_mobil and "bisa pilih banyak tipe" not in type_mobil: 
+        df_filtered = df_filtered[df_filtered[tipe_col].isin(type_mobil)]
+    if no_polisi and "bisa pilih banyak Nopol" not in no_polisi: 
+        df_filtered = df_filtered[df_filtered[nopol_col].isin(no_polisi)]
+
+    st.markdown("### 🚚 Utilisasi (SLA: 2 Hari Kerja)")
+    
+    # Kalkulasi Metrik (Diadaptasi dari kode lama yang sudah fix)
+    try:
+        rev_col = df_filtered.columns[97]          
+        cost_col = df_filtered.columns[98]         
+        rate_vendor_col = df_filtered.columns[102] 
+        add_rate_vendor_col = df_filtered.columns[103] 
         
-        with col_b:
-            opsi_branch = ["Semua"] + sorted(df_filtered[branch_col].dropna().unique().tolist())
-            pilih_branch = st.selectbox("Branch:", opsi_branch)
-        with col_c:
-            opsi_client = ["Semua"] + sorted(df_filtered[client_col].dropna().unique().tolist())
-            pilih_client = st.selectbox("Client:", opsi_client)
-        with col_g:
-            opsi_group = ["Semua"] + sorted(df_filtered[group_col].dropna().unique().tolist())
-            pilih_group = st.selectbox("Group:", opsi_group)
+        df_filtered[rev_col] = pd.to_numeric(df_filtered[rev_col], errors='coerce').fillna(0)
+        df_filtered[cost_col] = pd.to_numeric(df_filtered[cost_col], errors='coerce').fillna(0)
+        df_filtered[rate_vendor_col] = pd.to_numeric(df_filtered[rate_vendor_col], errors='coerce').fillna(0)
+        df_filtered[add_rate_vendor_col] = pd.to_numeric(df_filtered[add_rate_vendor_col], errors='coerce').fillna(0)
+        
+        df_filtered['Final_Cost'] = df_filtered[cost_col]
+        mask_kosong = df_filtered['Final_Cost'] == 0
+        df_filtered.loc[mask_kosong, 'Final_Cost'] = df_filtered.loc[mask_kosong, rate_vendor_col] + df_filtered.loc[mask_kosong, add_rate_vendor_col]
+        
+        total_rev = df_filtered[rev_col].sum()
+        total_cost = df_filtered['Final_Cost'].sum()
+        total_so = len(df_filtered)
+        
+        # Hitung Armada Aktif Unik
+        armada_aktif = df_filtered[nopol_col].nunique() if not df_filtered.empty else 0
+        
+        def format_rp(angka):
+            if angka >= 1e9: return f"Rp {angka/1e9:.1f} M"
+            elif angka >= 1e6: return f"Rp {angka/1e6:.1f} Jt"
+            return f"Rp {angka:,.0f}"
 
-        # Terapkan Saringan Operasional ke Dataframe
-        if pilih_branch != "Semua":
-            df_filtered = df_filtered[df_filtered[branch_col] == pilih_branch]
-        if pilih_client != "Semua":
-            df_filtered = df_filtered[df_filtered[client_col] == pilih_client]
-        if pilih_group != "Semua":
-            df_filtered = df_filtered[df_filtered[group_col] == pilih_group]
-
-        df_filtered = df_filtered.sort_values(by=date_col)
-            
-        st.markdown(f"<p style='color: #94a3b8; font-size: 0.95rem; margin-top: -5px;'>Periode Aktif: {start_date.strftime('%d %b %Y')} s/d {end_date.strftime('%d %b %Y')} | Filter: Branch ({pilih_branch}), Client ({pilih_client}), Group ({pilih_group})</p>", unsafe_allow_html=True)
+        # Render 4 Kotak Metrik
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Ritase (Sales Order)", f"{total_so}")
+        m2.metric("Armada Aktif", f"{armada_aktif} Unit")
+        m3.metric("Total MRC (Cost)", format_rp(total_cost))
+        m4.metric("Total Revenue", format_rp(total_rev))
+        
+        # Tombol Download Excel
         st.markdown("<br>", unsafe_allow_html=True)
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_export = df_filtered.copy()
+            df_export[date_col] = df_export[date_col].dt.strftime('%Y-%m-%d')
+            df_export.to_excel(writer, index=False, sheet_name='Data_Utilisasi')
+            
+        st.download_button(
+            label="📥 Unduh Data Utilisasi (Excel)",
+            data=buffer.getvalue(),
+            file_name=f"Utilisasi_{tabel_aktif}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
-        # --- MENU 1: RINGKASAN EKSEKUTIF ---
-        if menu == "Ringkasan Eksekutif":
-            try:
-                # Indeks Finansial Tetap Sama
-                rev_col = df_filtered.columns[97]          
-                cost_col = df_filtered.columns[98]         
-                rate_vendor_col = df_filtered.columns[102] 
-                add_rate_vendor_col = df_filtered.columns[103] 
-                
-                df_filtered[rev_col] = pd.to_numeric(df_filtered[rev_col], errors='coerce').fillna(0)
-                df_filtered[cost_col] = pd.to_numeric(df_filtered[cost_col], errors='coerce').fillna(0)
-                df_filtered[rate_vendor_col] = pd.to_numeric(df_filtered[rate_vendor_col], errors='coerce').fillna(0)
-                df_filtered[add_rate_vendor_col] = pd.to_numeric(df_filtered[add_rate_vendor_col], errors='coerce').fillna(0)
-                
-                df_filtered['Final_Cost'] = df_filtered[cost_col]
-                mask_kosong = df_filtered['Final_Cost'] == 0
-                df_filtered.loc[mask_kosong, 'Final_Cost'] = df_filtered.loc[mask_kosong, rate_vendor_col] + df_filtered.loc[mask_kosong, add_rate_vendor_col]
-                
-                df_filtered['Calculated_Margin'] = df_filtered[rev_col] - df_filtered['Final_Cost']
-                
-                total_rev = df_filtered[rev_col].sum()
-                total_cost = df_filtered['Final_Cost'].sum()
-                margin_rp = total_rev - total_cost
-                margin_pct = (margin_rp / total_rev * 100) if total_rev > 0 else 0
-                    
-                def format_rp(angka):
-                    if angka >= 1e9: return f"Rp {angka/1e9:.2f} M"
-                    elif angka >= 1e6: return f"Rp {angka/1e6:.2f} Jt"
-                    return f"Rp {angka:,.0f}"
-
-                # Tampilan Kotak Metrik Simetris
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Total Revenue", format_rp(total_rev))
-                col2.metric("Total Cost", format_rp(total_cost))
-                
-                delta_color = "normal" if margin_pct >= 0 else "inverse"
-                col3.metric("Total Margin", format_rp(margin_rp), f"{margin_pct:.1f}%", delta_color=delta_color)
-                col4.metric("Total Sales Order", f"{len(df_filtered):,}")
-                
-                # --- TOMBOL EKSTRAK EXCEL (Sesuai Tampilan Layar Utama) ---
-                st.markdown("<br>", unsafe_allow_html=True)
-                col_btn, _ = st.columns([1, 3])
-                with col_btn:
-                    try:
-                        buffer = io.BytesIO()
-                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                            df_export = df_filtered.copy()
-                            # Ubah format datetime tanggal jadi string teks bersih khusus buat file Excel
-                            df_export[date_col] = df_export[date_col].dt.strftime('%Y-%m-%d')
-                            df_export.to_excel(writer, index=False, sheet_name='TMS_Filtered')
-                        
-                        st.download_button(
-                            label="📥 Ekstrak Data ke Excel",
-                            data=buffer.getvalue(),
-                            file_name=f"Gotrans_Ekstrak_{bulan}_{start_date}_to_{end_date}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                    except Exception as ex:
-                        st.error(f"Gagal memproses ekstrak Excel: {ex}")
-
-                # Grafik Tren Harian
-                if not df_valid.empty and not df_filtered.empty:
-                    st.markdown("<br><br>", unsafe_allow_html=True)
-                    st.markdown("### 📊 Tren Performa Operasional Harian")
-                    
-                    df_daily = df_filtered.groupby(df_filtered[date_col].dt.date).agg({
-                        rev_col: 'sum',
-                        'Final_Cost': 'sum',
-                        'Calculated_Margin': 'sum'
-                    }).reset_index()
-                    
-                    df_daily.columns = ['Tanggal', 'Revenue', 'Cost', 'Margin']
-                    
-                    chart_col1, chart_col2 = st.columns(2)
-                    
-                    with chart_col1:
-                        fig_rev_cost = px.line(
-                            df_daily, x='Tanggal', y=['Revenue', 'Cost'],
-                            labels={'value': 'Jumlah Angka (Rp)', 'variable': 'Komponen'},
-                            title="Tren Harian: Total Revenue vs Total Cost",
-                            template="plotly_dark",
-                            color_discrete_sequence=["#38bdf8", "#f43f5e"] 
-                        )
-                        fig_rev_cost.update_layout(
-                            paper_bgcolor='rgba(17, 24, 39, 0.5)', plot_bgcolor='rgba(0,0,0,0)',
-                            xaxis=dict(showgrid=False), yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
-                        )
-                        st.plotly_chart(fig_rev_cost, use_container_width=True)
-                        
-                    with chart_col2:
-                        fig_margin = px.line(
-                            df_daily, x='Tanggal', y='Margin',
-                            labels={'Margin': 'Total Margin (Rp)'},
-                            title="Tren Harian: Pergerakan Net Margin",
-                            template="plotly_dark",
-                            color_discrete_sequence=["#10b981"] 
-                        )
-                        fig_margin.update_layout(
-                            paper_bgcolor='rgba(17, 24, 39, 0.5)', plot_bgcolor='rgba(0,0,0,0)',
-                            xaxis=dict(showgrid=False), yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
-                        )
-                        st.plotly_chart(fig_margin, use_container_width=True)
-                
-            except IndexError:
-                st.error("⚠️ Struktur data kolom Excel berubah atau posisi indeks tidak sesuai.")
-
-        # --- MENU 2: DATA RAW OPERASIONAL ---
-        def tampilkan_raw_data():
-            st.dataframe(df_filtered)
-
-    except Exception as e:
-        st.error(f"Gagal memuat data dari tabel `{bulan}`: {e}")
+    except IndexError:
+         st.error("⚠️ Struktur data berubah, pastikan kolom Excel sesuai dengan format database.")
