@@ -1,10 +1,10 @@
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import glob
 import os
 
 # Mengambil URL database dari GitHub Secrets secara otomatis
-DATABASE_URL = os.getenv("SUPABASE_URL").strip()
+DATABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 if not DATABASE_URL:
     raise ValueError("Waduh, SUPABASE_URL nggak ketemu di GitHub Secrets!")
 
@@ -36,34 +36,51 @@ def migrate():
             kolom_unik = 'No_Order' 
             
             if kolom_unik in df.columns:
-                # 1. Cek ID apa saja yang sudah ada di database Supabase
+                print(f"Menggunakan metode Update & Insert (Zero Egress) untuk '{table_name}'...", flush=True)
+                
+                # 1. Ambil daftar No_Order dari file Excel
+                # Hapus baris yang No_Order-nya kosong (NaN/NaT) dari dataframe biar query gak error
+                df = df.dropna(subset=[kolom_unik])
+                excel_ids = df[kolom_unik].astype(str).tolist()
+                
                 try:
-                    # Kutip ganda ditambahkan agar PostgreSQL aman membaca nama kolom/tabel
-                    query = f'SELECT "{kolom_unik}" FROM "{table_name}"'
-                    existing_data = pd.read_sql(query, engine)
-                    existing_ids = existing_data[kolom_unik].tolist()
+                    # 2. Hapus data lama di Supabase yang No_Order-nya ada di file Excel ini (Zero Egress)
+                    if excel_ids:
+                        # Format list menjadi string dan escape tanda kutip tunggal jika ada ('ORDER1', 'ORDER2')
+                        safe_ids = [str(eid).replace("'", "''") for eid in excel_ids]
+                        format_ids = "', '".join(safe_ids)
+                        
+                        delete_query = text(f"""DELETE FROM "{table_name}" WHERE "{kolom_unik}" IN ('{format_ids}')""")
+                        
+                        # Jalankan perintah DELETE
+                        with engine.begin() as conn:
+                            conn.execute(delete_query)
+                            
+                    # 3. Masukkan semua data dari Excel sebagai data terbaru (Append)
+                    if not df.empty:
+                        df.to_sql(
+                            table_name, 
+                            engine, 
+                            if_exists='append', 
+                            index=False, 
+                            chunksize=1000, 
+                            method='multi'
+                        )
+                        print(f"Sukses update & upload {len(df)} baris data ke tabel: {table_name}!", flush=True)
+                    
                 except Exception as e:
-                    # Kalau error (misal tabel belum pernah dibuat di DB), anggap database masih kosong
-                    print(f"Tabel '{table_name}' sepertinya baru atau belum ada. Membuat tabel baru...", flush=True)
-                    existing_ids = []
-                
-                # 2. Saring data Excel. Hanya simpan baris yang ID-nya BELUM ADA di database
-                df_baru = df[~df[kolom_unik].isin(existing_ids)]
-                
-                # 3. Upload hanya jika ada data baru (menggunakan append)
-                if not df_baru.empty:
-                    print(f"Menemukan {len(df_baru)} baris data BARU. Mulai upload...", flush=True)
-                    df_baru.to_sql(
-                        table_name, 
-                        engine, 
-                        if_exists='append', 
-                        index=False, 
-                        chunksize=1000, 
-                        method='multi'
-                    )
-                    print(f"Sukses upload data baru ke tabel: {table_name}!", flush=True)
-                else:
-                    print(f"Semua data dari file ini sudah ada di database. Lewati upload.", flush=True)
+                    # Kalau error (misal tabel belum ada di Supabase), langsung buat tabel baru dan upload
+                    print(f"Tabel '{table_name}' sepertinya belum ada (atau ada error: {e}). Membuat tabel baru...", flush=True)
+                    if not df.empty:
+                        df.to_sql(
+                            table_name, 
+                            engine, 
+                            if_exists='append', 
+                            index=False, 
+                            chunksize=1000, 
+                            method='multi'
+                        )
+                        print(f"Sukses membuat tabel dan upload data ke: {table_name}!", flush=True)
             
             else:
                 # Fallback: Kalau kolom unik tidak ditemukan di file Excel ini, pakai cara replace
